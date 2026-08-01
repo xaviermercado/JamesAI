@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import dotenv from 'dotenv';
 
 import { createRecommendationsRouter } from './routes/recommendations';
@@ -11,6 +12,10 @@ const app = express();
 const port = Number(process.env.PORT ?? 3001);
 const tmdbToken = process.env.TMDB_API_TOKEN;
 
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
