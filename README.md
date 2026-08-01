@@ -1,9 +1,8 @@
-<<<<<<< HEAD
-# Welcome to your Expo app 👋
+# JamesAI
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+JamesAI is a web-first movie recommendation app built with Expo, React Native, and a lightweight Node.js backend.
 
-## Get started
+## Getting started
 
 1. Install dependencies
 
@@ -11,51 +10,45 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Copy the example environment file and fill in any required values
 
    ```bash
-   npx expo start
+   copy .env.example .env
    ```
 
-In the output, you'll find options to open the app in a
+3. Start the backend
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   npx tsx server/src/index.ts
+   ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+4. Start the Expo app
 
-## Get a fresh project
+   ```bash
+   npm run web
+   ```
 
-When you're ready, run:
+## Environment variables
+
+The backend uses the following environment variables:
+
+- `PORT`
+- `TMDB_API_TOKEN`
+- `TMDB_TIMEOUT_MS`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_TIMEOUT_MS`
+
+## Backend contract
+
+- `POST /api/recommendations`
+- `GET /api/movies/:movieId/providers`
+
+## Validation
+
+Run the checks below before shipping changes:
 
 ```bash
-npm run reset-project
+npm run typecheck
+npm test
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-=======
-# JamesAI
-First Repository for movie suggestion AI
->>>>>>> fa338df2b038420a70e965519393efa46ebf967e
