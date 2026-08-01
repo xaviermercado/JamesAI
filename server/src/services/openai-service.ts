@@ -13,6 +13,13 @@ interface OpenAiRankingPayload {
   }>;
 }
 
+function buildFallbackRecommendations(request: RecommendationRequest, candidates: MovieCandidate[]): MovieRecommendation[] {
+  return candidates.slice(0, 5).map((candidate) => ({
+    ...candidate,
+    explanation: `Temporary explanation based on the request: ${request.description}`,
+  }));
+}
+
 export class OpenAiService {
   constructor(private readonly config: OpenAiConfig) {}
 
@@ -21,10 +28,7 @@ export class OpenAiService {
     candidates: MovieCandidate[],
   ): Promise<MovieRecommendation[]> {
     if (!this.config.apiKey || this.config.apiKey === 'missing-key') {
-      return candidates.slice(0, 5).map((candidate) => ({
-        ...candidate,
-        explanation: `Temporary explanation based on the request: ${request.description}`,
-      }));
+      return buildFallbackRecommendations(request, candidates);
     }
 
     const controller = new AbortController();
@@ -42,7 +46,7 @@ export class OpenAiService {
           input: [
             {
               role: 'system',
-              content: 'You are ranking movie recommendations for a movie suggestion app. Return JSON with rankings array of {tmdbMovieId, explanation}.',
+              content: 'You are ranking movie recommendations for a movie suggestion app. Return JSON with rankings array of {tmdbMovieId, explanation}. Prioritize the candidate that best matches the mood, runtime, genre, and era described by the user. Keep explanations concise and specific.',
             },
             {
               role: 'user',
@@ -66,7 +70,17 @@ export class OpenAiService {
       const parsed = JSON.parse(text) as OpenAiRankingPayload;
       const rankingMap = new Map(parsed.rankings?.map((item) => [item.tmdbMovieId, item.explanation]) ?? []);
 
-      return candidates.slice(0, 5).map((candidate) => ({
+      const rankedCandidates = [...candidates]
+        .sort((a, b) => {
+          const aRank = parsed.rankings?.find((item) => item.tmdbMovieId === a.tmdbMovieId);
+          const bRank = parsed.rankings?.find((item) => item.tmdbMovieId === b.tmdbMovieId);
+          const aIndex = aRank ? parsed.rankings.indexOf(aRank) : Number.MAX_SAFE_INTEGER;
+          const bIndex = bRank ? parsed.rankings.indexOf(bRank) : Number.MAX_SAFE_INTEGER;
+          return aIndex - bIndex;
+        })
+        .slice(0, 5);
+
+      return rankedCandidates.map((candidate) => ({
         ...candidate,
         explanation: rankingMap.get(candidate.tmdbMovieId) ?? `Temporary explanation based on the request: ${request.description}`,
       }));
@@ -74,10 +88,7 @@ export class OpenAiService {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('OpenAI request timed out');
       }
-      return candidates.slice(0, 5).map((candidate) => ({
-        ...candidate,
-        explanation: `Temporary explanation based on the request: ${request.description}`,
-      }));
+      return buildFallbackRecommendations(request, candidates);
     } finally {
       clearTimeout(timeout);
     }

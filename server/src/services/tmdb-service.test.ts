@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TmdbService } from './tmdb-service';
 
 const fetchMock = vi.fn();
 
 global.fetch = fetchMock as unknown as typeof fetch;
+
+beforeEach(() => {
+  fetchMock.mockReset();
+});
 
 describe('TmdbService', () => {
   it('returns normalized recommendations from TMDB responses', async () => {
@@ -32,5 +36,21 @@ describe('TmdbService', () => {
       mediaType: 'movie',
       providers: ['Netflix'],
     });
+  });
+
+  it('uses description cues to shape TMDB discover filters', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: [] }),
+    });
+
+    const service = new TmdbService({ apiToken: 'test-token', baseUrl: 'https://api.themoviedb.org/3', timeoutMs: 1000 });
+    await service.getRecommendations({ description: 'funny date night from the 90s', mediaType: 'movie', maxRuntime: 120, country: 'US' });
+
+    const discoverUrl = fetchMock.mock.calls[0][0] as string;
+    const search = new URL(discoverUrl).searchParams;
+    expect(search.get('with_genres')).toContain('35');
+    expect(search.get('primary_release_date.gte')).toBe('1990-01-01');
+    expect(search.get('primary_release_date.lte')).toBe('1999-12-31');
   });
 });

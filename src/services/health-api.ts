@@ -1,6 +1,4 @@
-const API_BASE_URL = typeof window !== 'undefined' && window.location?.origin
-  ? `${window.location.origin}`
-  : 'http://localhost:3001';
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 export interface HealthStatus {
   status: 'ok' | 'error';

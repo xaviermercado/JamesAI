@@ -1,8 +1,6 @@
 import type { RecommendationRequest, RecommendationResponse } from '@/types/recommendations';
 
-const API_BASE_URL = typeof window !== 'undefined' && window.location?.origin
-  ? `${window.location.origin}`
-  : 'http://localhost:3001';
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 function toErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
@@ -18,7 +16,7 @@ function toErrorMessage(error: unknown): string {
 
 export async function getRecommendations(request: RecommendationRequest): Promise<RecommendationResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/recommendations`, {
+    const response = await fetch(`${API_BASE_URL}/api/recommendations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

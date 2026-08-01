@@ -61,6 +61,23 @@ const providerNameToIdMap: Record<string, string> = {
   peacock: '386',
 };
 
+const descriptionGenreMap: Record<string, string> = {
+  funny: '35',
+  comedy: '35',
+  romantic: '10749',
+  romance: '10749',
+  scary: '27',
+  horror: '27',
+  action: '28',
+  thriller: '53',
+  drama: '18',
+  adventurous: '12',
+  fantasy: '14',
+  sci: '878',
+  fiction: '878',
+  family: '10751',
+};
+
 export class TmdbService {
   constructor(
     private readonly config: TmdbConfig,
@@ -74,18 +91,49 @@ export class TmdbService {
     const candidates = (discoverResponse.results ?? []).filter(
       (candidate) => !request.excludedMovieIds?.includes(candidate.id),
     );
-    const realCandidates = await this.enrichCandidates(candidates.slice(0, 10), request);
-    const rankedCandidates = this.openAiService
-      ? await this.openAiService.rankCandidates(request, realCandidates)
-      : realCandidates.slice(0, 5).map((candidate) => ({
+    const realCandidates = await this.enrichCandidates(candidates.slice(0, 12), request);
+    const rankedCandidates = this.rankCandidates(request, realCandidates);
+    const finalCandidates = this.openAiService
+      ? await this.openAiService.rankCandidates(request, rankedCandidates)
+      : rankedCandidates.slice(0, 5).map((candidate) => ({
           ...candidate,
           explanation: this.buildTemporaryExplanation(candidate, request),
         }));
 
     return {
-      recommendations: rankedCandidates,
+      recommendations: finalCandidates,
       source: 'live',
     };
+  }
+
+  private rankCandidates(request: RecommendationRequest, candidates: MovieCandidate[]): MovieCandidate[] {
+    const description = request.description?.toLowerCase() ?? '';
+    const tokens = description
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+
+    const scoreCandidate = (candidate: MovieCandidate) => {
+      const title = candidate.title?.toLowerCase() ?? '';
+      const overview = '';
+      const combinedText = [title, candidate.genres.join(' '), candidate.providers.join(' ')].join(' ').toLowerCase();
+      const genreHits = candidate.genres.filter((genre) => tokens.some((token) => genre.toLowerCase().includes(token))).length;
+      const providerHits = candidate.providers.filter((provider) => tokens.some((token) => provider.toLowerCase().includes(token))).length;
+      const tokenHits = tokens.filter((token) => combinedText.includes(token)).length;
+      const runtimeBonus = request.maxRuntime && candidate.runtimeMinutes > 0
+        ? candidate.runtimeMinutes <= request.maxRuntime ? 2 : 0
+        : 0;
+      const dateBonus = /90s|nineties|1990|1990s/.test(description) && candidate.releaseYear >= 1990 && candidate.releaseYear < 2000 ? 2 : 0;
+      const funBonus = /funny|comedy|light|feel good|date night|romantic|quirky|whimsical|heartfelt/.test(description) && candidate.genres.some((genre) => ['Comedy', 'Romance', 'Drama'].includes(genre)) ? 2 : 0;
+      const qualityBonus = candidate.tmdbRating > 6.5 ? 1 : 0;
+      const popularityBonus = candidate.tmdbRating > 7 ? 1 : 0;
+
+      return tokenHits * 3 + genreHits * 2 + providerHits * 2 + runtimeBonus + dateBonus + funBonus + qualityBonus + popularityBonus;
+    };
+
+    return candidates
+      .map((candidate) => ({ candidate, score: scoreCandidate(candidate) }))
+      .sort((a, b) => b.score - a.score)
+      .map(({ candidate }) => candidate);
   }
 
   private buildDiscoverParams(request: RecommendationRequest): URLSearchParams {
@@ -96,6 +144,18 @@ export class TmdbService {
       sort_by: 'popularity.desc',
       page: '1',
     });
+
+    const description = request.description?.toLowerCase() ?? '';
+    const matchedGenres = this.extractGenresFromDescription(description);
+    if (matchedGenres.length) {
+      params.set('with_genres', matchedGenres.join('|'));
+    }
+
+    const yearRange = this.extractYearRange(description);
+    if (yearRange) {
+      params.set('primary_release_date.gte', yearRange.start);
+      params.set('primary_release_date.lte', yearRange.end);
+    }
 
     if (request.maxRuntime) {
       params.set('with_runtime.lte', String(request.maxRuntime));
@@ -119,6 +179,39 @@ export class TmdbService {
     }
 
     return params;
+  }
+
+  private extractGenresFromDescription(description: string): string[] {
+    const tokens = description.split(/[^a-z0-9]+/).filter(Boolean);
+    const matched = new Set<string>();
+
+    for (const token of tokens) {
+      const genreId = descriptionGenreMap[token];
+      if (genreId) {
+        matched.add(genreId);
+      }
+
+      if (token.includes('funny') || token.includes('comedy')) {
+        matched.add('35');
+      }
+      if (token.includes('date')) {
+        matched.add('10749');
+      }
+    }
+
+    return Array.from(matched);
+  }
+
+  private extractYearRange(description: string): { start: string; end: string } | undefined {
+    if (/90s|nineties|1990s|1990/.test(description)) {
+      return { start: '1990-01-01', end: '1999-12-31' };
+    }
+
+    if (/80s|eighties|1980s|1980/.test(description)) {
+      return { start: '1980-01-01', end: '1989-12-31' };
+    }
+
+    return undefined;
   }
 
   private async enrichCandidates(
