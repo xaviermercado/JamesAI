@@ -73,37 +73,51 @@ export class TmdbService {
 
   async getRecommendations(request: RecommendationRequest): Promise<RecommendationResponse> {
     const mediaType = request.mediaType ?? 'movie';
+    console.log(`[TMDB] Request: ${request.description} (type: ${mediaType})`);
 
     // Phase 1: ask OpenAI to interpret the description into concrete search terms.
     const interpretation = this.openAiService
       ? await this.openAiService.interpretRequest(request)
       : null;
+    console.log('[TMDB] OpenAI interpretation:', JSON.stringify(interpretation));
 
     const allResults = new Map<number, TmdbDiscoverMovieResult>();
 
-    const addResults = (items: TmdbDiscoverMovieResult[]) => {
+    const addResults = (items: TmdbDiscoverMovieResult[], source: string) => {
+      console.log(`[TMDB] Adding ${items.length} results from ${source}`);
       for (const item of items) {
         if (!allResults.has(item.id)) allResults.set(item.id, item);
       }
+      console.log(`[TMDB] Total unique results so far: ${allResults.size}`);
     };
 
     // Phase 2a: search TMDB by specific title queries from OpenAI.
     if (interpretation?.searchQueries?.length) {
+      console.log(`[TMDB] Searching for titles: ${interpretation.searchQueries.join(', ')}`);
       await Promise.all(
         interpretation.searchQueries.map(async (query) => {
           const results = await this.searchByTitle(query, mediaType);
-          addResults(results);
+          console.log(`[TMDB] Title search for "${query}" returned ${results.length} results`);
+          addResults(results, `title-search[${query}]`);
         }),
       );
     }
 
     // Phase 2b: find TMDB keyword IDs, then discover by keyword.
     if (interpretation?.keywords?.length) {
+      console.log(`[TMDB] Resolving keywords: ${interpretation.keywords.join(', ')}`);
       const keywordIds = (
-        await Promise.all(interpretation.keywords.map((kw) => this.resolveKeywordId(kw)))
+        await Promise.all(
+          interpretation.keywords.map(async (kw) => {
+            const id = await this.resolveKeywordId(kw);
+            console.log(`[TMDB] Keyword "${kw}" resolved to ID: ${id}`);
+            return id;
+          }),
+        )
       ).filter((id): id is number => id !== null);
 
       if (keywordIds.length) {
+        console.log(`[TMDB] Discovering by keywords: ${keywordIds.join(', ')}`);
         const kwParams = this.buildDiscoverParams(request, {
           genreIds: interpretation.genreIds,
           yearRange: interpretation.yearRange,
@@ -116,26 +130,32 @@ export class TmdbService {
           `${this.config.baseUrl}/discover/${mediaType}`,
           kwParams,
         );
-        addResults(kwResults.results ?? []);
+        addResults(kwResults.results ?? [], `keyword-discover[${keywordIds.join(',')}]`);
+      } else {
+        console.log('[TMDB] No keywords resolved, skipping keyword discover');
       }
     }
 
     // Phase 2c: broad discover using genre/year/filters as a fallback pool.
+    console.log('[TMDB] Running broad discover as fallback');
     const discoverParams = this.buildDiscoverParams(request, {
       genreIds: interpretation?.genreIds,
       yearRange: interpretation?.yearRange,
     });
+    console.log('[TMDB] Discover params:', Object.fromEntries(discoverParams));
     const discoverResults = await this.requestJson<TmdbDiscoverResponse>(
       `${this.config.baseUrl}/discover/${mediaType}`,
       discoverParams,
     );
-    addResults(discoverResults.results ?? []);
+    addResults(discoverResults.results ?? [], 'broad-discover');
 
     // Filter excluded IDs and enrich up to 15 candidates.
     const candidates = [...allResults.values()].filter(
       (r) => !request.excludedMovieIds?.includes(r.id),
     );
+    console.log(`[TMDB] Enriching ${Math.min(candidates.length, 15)} of ${candidates.length} candidates`);
     const enriched = await this.enrichCandidates(candidates.slice(0, 15), request);
+    console.log(`[TMDB] Enriched candidates:`, enriched.map((c) => ({ id: c.tmdbMovieId, title: c.title })));
 
     // Phase 3: OpenAI ranks and filters the merged pool.
     const recommendations = this.openAiService
@@ -144,6 +164,7 @@ export class TmdbService {
           ...c,
           explanation: this.buildTemporaryExplanation(c, request),
         }));
+    console.log('[TMDB] Final recommendations:', recommendations.map((r) => ({ id: r.tmdbMovieId, title: r.title, explanation: r.explanation })));
 
     return { recommendations, source: 'live' };
   }
@@ -157,8 +178,11 @@ export class TmdbService {
         `${this.config.baseUrl}/search/${mediaType}`,
         new URLSearchParams({ query, language: 'en-US', page: '1' }),
       );
-      return (response.results ?? []).slice(0, 5);
-    } catch {
+      const results = (response.results ?? []).slice(0, 5);
+      console.log(`[TMDB] searchByTitle("${query}"): ${results.length} results`);
+      return results;
+    } catch (error) {
+      console.error(`[TMDB] searchByTitle("${query}") failed:`, error);
       return [];
     }
   }
@@ -169,8 +193,11 @@ export class TmdbService {
         `${this.config.baseUrl}/search/keyword`,
         new URLSearchParams({ query: keyword }),
       );
-      return response.results?.[0]?.id ?? null;
-    } catch {
+      const id = response.results?.[0]?.id ?? null;
+      console.log(`[TMDB] resolveKeywordId("${keyword}"): ${id}`);
+      return id;
+    } catch (error) {
+      console.error(`[TMDB] resolveKeywordId("${keyword}") failed:`, error);
       return null;
     }
   }

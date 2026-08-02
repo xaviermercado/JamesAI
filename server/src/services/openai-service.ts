@@ -39,6 +39,7 @@ export class OpenAiService {
   private async chatJson<T>(messages: Array<{ role: string; content: string }>): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    console.log('[OpenAI] Making request to', CHAT_COMPLETIONS_URL, 'with model', this.config.model);
 
     try {
       const response = await fetch(CHAT_COMPLETIONS_URL, {
@@ -56,11 +57,14 @@ export class OpenAiService {
       });
 
       if (!response.ok) {
-        throw new Error(`OpenAI request failed with status ${response.status}`);
+        const errorText = await response.text();
+        console.error(`[OpenAI] API error ${response.status}:`, errorText);
+        throw new Error(`OpenAI request failed with status ${response.status}: ${errorText}`);
       }
 
       const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
       const text = payload.choices?.[0]?.message?.content ?? '{}';
+      console.log('[OpenAI] Response:', text);
       return JSON.parse(text) as T;
     } finally {
       clearTimeout(timeout);
@@ -69,10 +73,14 @@ export class OpenAiService {
 
   // Phase 1: turn the user's free-text description into concrete TMDB search terms.
   async interpretRequest(request: RecommendationRequest): Promise<RequestInterpretation | null> {
-    if (!this.isConfigured) return null;
+    if (!this.isConfigured) {
+      console.log('[OpenAI] Skipping interpretation: OpenAI not configured');
+      return null;
+    }
 
     try {
-      return await this.chatJson<RequestInterpretation>([
+      console.log('[OpenAI] Interpreting request:', request.description);
+      const result = await this.chatJson<RequestInterpretation>([
         {
           role: 'system',
           content:
@@ -88,7 +96,10 @@ export class OpenAiService {
           content: JSON.stringify({ description: request.description, mediaType: request.mediaType ?? 'movie' }),
         },
       ]);
-    } catch {
+      console.log('[OpenAI] Interpretation result:', JSON.stringify(result));
+      return result;
+    } catch (error) {
+      console.error('[OpenAI] interpretRequest failed:', error);
       return null;
     }
   }
@@ -98,10 +109,12 @@ export class OpenAiService {
     candidates: MovieCandidate[],
   ): Promise<MovieRecommendation[]> {
     if (!this.isConfigured) {
+      console.log('[OpenAI] Skipping ranking: OpenAI not configured');
       return buildFallbackRecommendations(request, candidates);
     }
 
     try {
+      console.log('[OpenAI] Ranking', candidates.length, 'candidates');
       const parsed = await this.chatJson<OpenAiRankingPayload>([
         {
           role: 'system',
@@ -117,6 +130,7 @@ export class OpenAiService {
       ]);
 
       const rankingMap = new Map(parsed.rankings?.map((item) => [item.tmdbMovieId, item.explanation]) ?? []);
+      console.log('[OpenAI] Ranking returned', rankingMap.size, 'ranked items');
 
       const ranked = [...candidates]
         .filter((c) => rankingMap.has(c.tmdbMovieId))
@@ -129,12 +143,14 @@ export class OpenAiService {
 
       // Fall back to unfiltered candidates if OpenAI dropped everything
       const result = ranked.length > 0 ? ranked : candidates.slice(0, 5);
+      console.log('[OpenAI] Final result:', result.length, 'recommendations');
 
       return result.map((candidate) => ({
         ...candidate,
         explanation: rankingMap.get(candidate.tmdbMovieId) ?? `Matches your request: ${request.description}`,
       }));
     } catch (error) {
+      console.error('[OpenAI] rankCandidates failed:', error);
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('OpenAI request timed out');
       }
