@@ -1,6 +1,8 @@
 import type { RecommendationRequest, RecommendationResponse } from '@/types/recommendations';
 
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+import { resolveApiBaseUrl } from './api-base-url';
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 function toErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
