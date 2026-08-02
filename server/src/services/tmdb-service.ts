@@ -48,6 +48,10 @@ interface TmdbDiscoverResponse {
   total_results?: number;
 }
 
+interface TmdbKeywordSearchResponse {
+  results?: Array<{ id: number; name: string }>;
+}
+
 const providerNameToIdMap: Record<string, string> = {
   netflix: '8',
   'prime video': '9',
@@ -61,23 +65,6 @@ const providerNameToIdMap: Record<string, string> = {
   peacock: '386',
 };
 
-const descriptionGenreMap: Record<string, string> = {
-  funny: '35',
-  comedy: '35',
-  romantic: '10749',
-  romance: '10749',
-  scary: '27',
-  horror: '27',
-  action: '28',
-  thriller: '53',
-  drama: '18',
-  adventurous: '12',
-  fantasy: '14',
-  sci: '878',
-  fiction: '878',
-  family: '10751',
-};
-
 export class TmdbService {
   constructor(
     private readonly config: TmdbConfig,
@@ -85,58 +72,113 @@ export class TmdbService {
   ) {}
 
   async getRecommendations(request: RecommendationRequest): Promise<RecommendationResponse> {
-    const params = this.buildDiscoverParams(request);
-    const discoverUrl = `${this.config.baseUrl}/discover/${request.mediaType ?? 'movie'}`;
-    const discoverResponse = await this.requestJson<TmdbDiscoverResponse>(discoverUrl, params);
-    const candidates = (discoverResponse.results ?? []).filter(
-      (candidate) => !request.excludedMovieIds?.includes(candidate.id),
+    const mediaType = request.mediaType ?? 'movie';
+
+    // Phase 1: ask OpenAI to interpret the description into concrete search terms.
+    const interpretation = this.openAiService
+      ? await this.openAiService.interpretRequest(request)
+      : null;
+
+    const allResults = new Map<number, TmdbDiscoverMovieResult>();
+
+    const addResults = (items: TmdbDiscoverMovieResult[]) => {
+      for (const item of items) {
+        if (!allResults.has(item.id)) allResults.set(item.id, item);
+      }
+    };
+
+    // Phase 2a: search TMDB by specific title queries from OpenAI.
+    if (interpretation?.searchQueries?.length) {
+      await Promise.all(
+        interpretation.searchQueries.map(async (query) => {
+          const results = await this.searchByTitle(query, mediaType);
+          addResults(results);
+        }),
+      );
+    }
+
+    // Phase 2b: find TMDB keyword IDs, then discover by keyword.
+    if (interpretation?.keywords?.length) {
+      const keywordIds = (
+        await Promise.all(interpretation.keywords.map((kw) => this.resolveKeywordId(kw)))
+      ).filter((id): id is number => id !== null);
+
+      if (keywordIds.length) {
+        const kwParams = this.buildDiscoverParams(request, {
+          genreIds: interpretation.genreIds,
+          yearRange: interpretation.yearRange,
+        });
+        kwParams.set('with_keywords', keywordIds.join('|'));
+        kwParams.delete('sort_by');
+        kwParams.set('sort_by', 'vote_average.desc');
+        kwParams.set('vote_count.gte', '20');
+        const kwResults = await this.requestJson<TmdbDiscoverResponse>(
+          `${this.config.baseUrl}/discover/${mediaType}`,
+          kwParams,
+        );
+        addResults(kwResults.results ?? []);
+      }
+    }
+
+    // Phase 2c: broad discover using genre/year/filters as a fallback pool.
+    const discoverParams = this.buildDiscoverParams(request, {
+      genreIds: interpretation?.genreIds,
+      yearRange: interpretation?.yearRange,
+    });
+    const discoverResults = await this.requestJson<TmdbDiscoverResponse>(
+      `${this.config.baseUrl}/discover/${mediaType}`,
+      discoverParams,
     );
-    const realCandidates = await this.enrichCandidates(candidates.slice(0, 12), request);
-    const rankedCandidates = this.rankCandidates(request, realCandidates);
-    const finalCandidates = this.openAiService
-      ? await this.openAiService.rankCandidates(request, rankedCandidates)
-      : rankedCandidates.slice(0, 5).map((candidate) => ({
-          ...candidate,
-          explanation: this.buildTemporaryExplanation(candidate, request),
+    addResults(discoverResults.results ?? []);
+
+    // Filter excluded IDs and enrich up to 15 candidates.
+    const candidates = [...allResults.values()].filter(
+      (r) => !request.excludedMovieIds?.includes(r.id),
+    );
+    const enriched = await this.enrichCandidates(candidates.slice(0, 15), request);
+
+    // Phase 3: OpenAI ranks and filters the merged pool.
+    const recommendations = this.openAiService
+      ? await this.openAiService.rankCandidates(request, enriched)
+      : enriched.slice(0, 5).map((c) => ({
+          ...c,
+          explanation: this.buildTemporaryExplanation(c, request),
         }));
 
-    return {
-      recommendations: finalCandidates,
-      source: 'live',
-    };
+    return { recommendations, source: 'live' };
   }
 
-  private rankCandidates(request: RecommendationRequest, candidates: MovieCandidate[]): MovieCandidate[] {
-    const description = request.description?.toLowerCase() ?? '';
-    const tokens = description
-      .split(/[^a-z0-9]+/)
-      .filter(Boolean);
-
-    const scoreCandidate = (candidate: MovieCandidate) => {
-      const title = candidate.title?.toLowerCase() ?? '';
-      const overview = '';
-      const combinedText = [title, candidate.genres.join(' '), candidate.providers.join(' ')].join(' ').toLowerCase();
-      const genreHits = candidate.genres.filter((genre) => tokens.some((token) => genre.toLowerCase().includes(token))).length;
-      const providerHits = candidate.providers.filter((provider) => tokens.some((token) => provider.toLowerCase().includes(token))).length;
-      const tokenHits = tokens.filter((token) => combinedText.includes(token)).length;
-      const runtimeBonus = request.maxRuntime && candidate.runtimeMinutes > 0
-        ? candidate.runtimeMinutes <= request.maxRuntime ? 2 : 0
-        : 0;
-      const dateBonus = /90s|nineties|1990|1990s/.test(description) && candidate.releaseYear >= 1990 && candidate.releaseYear < 2000 ? 2 : 0;
-      const funBonus = /funny|comedy|light|feel good|date night|romantic|quirky|whimsical|heartfelt/.test(description) && candidate.genres.some((genre) => ['Comedy', 'Romance', 'Drama'].includes(genre)) ? 2 : 0;
-      const qualityBonus = candidate.tmdbRating > 6.5 ? 1 : 0;
-      const popularityBonus = candidate.tmdbRating > 7 ? 1 : 0;
-
-      return tokenHits * 3 + genreHits * 2 + providerHits * 2 + runtimeBonus + dateBonus + funBonus + qualityBonus + popularityBonus;
-    };
-
-    return candidates
-      .map((candidate) => ({ candidate, score: scoreCandidate(candidate) }))
-      .sort((a, b) => b.score - a.score)
-      .map(({ candidate }) => candidate);
+  private async searchByTitle(
+    query: string,
+    mediaType: 'movie' | 'tv',
+  ): Promise<TmdbDiscoverMovieResult[]> {
+    try {
+      const response = await this.requestJson<TmdbDiscoverResponse>(
+        `${this.config.baseUrl}/search/${mediaType}`,
+        new URLSearchParams({ query, language: 'en-US', page: '1' }),
+      );
+      return (response.results ?? []).slice(0, 5);
+    } catch {
+      return [];
+    }
   }
 
-  private buildDiscoverParams(request: RecommendationRequest): URLSearchParams {
+  private async resolveKeywordId(keyword: string): Promise<number | null> {
+    try {
+      const response = await this.requestJson<TmdbKeywordSearchResponse>(
+        `${this.config.baseUrl}/search/keyword`,
+        new URLSearchParams({ query: keyword }),
+      );
+      return response.results?.[0]?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildDiscoverParams(
+    request: RecommendationRequest,
+    overrides?: { genreIds?: number[]; yearRange?: { start: string; end: string } | null },
+  ): URLSearchParams {
     const params = new URLSearchParams({
       include_adult: 'false',
       include_video: 'false',
@@ -145,13 +187,14 @@ export class TmdbService {
       page: '1',
     });
 
-    const description = request.description?.toLowerCase() ?? '';
-    const matchedGenres = this.extractGenresFromDescription(description);
-    if (matchedGenres.length) {
-      params.set('with_genres', matchedGenres.join('|'));
+    const genreIds = overrides?.genreIds?.length
+      ? overrides.genreIds.map(String)
+      : [];
+    if (genreIds.length) {
+      params.set('with_genres', genreIds.join('|'));
     }
 
-    const yearRange = this.extractYearRange(description);
+    const yearRange = overrides?.yearRange ?? this.extractYearRange(request.description ?? '');
     if (yearRange) {
       params.set('primary_release_date.gte', yearRange.start);
       params.set('primary_release_date.lte', yearRange.end);
@@ -174,43 +217,16 @@ export class TmdbService {
       }
     }
 
-    if (request.excludedMovieIds?.length) {
-      params.set('exclude_movie_ids', request.excludedMovieIds.join(','));
-    }
-
     return params;
-  }
-
-  private extractGenresFromDescription(description: string): string[] {
-    const tokens = description.split(/[^a-z0-9]+/).filter(Boolean);
-    const matched = new Set<string>();
-
-    for (const token of tokens) {
-      const genreId = descriptionGenreMap[token];
-      if (genreId) {
-        matched.add(genreId);
-      }
-
-      if (token.includes('funny') || token.includes('comedy')) {
-        matched.add('35');
-      }
-      if (token.includes('date')) {
-        matched.add('10749');
-      }
-    }
-
-    return Array.from(matched);
   }
 
   private extractYearRange(description: string): { start: string; end: string } | undefined {
     if (/90s|nineties|1990s|1990/.test(description)) {
       return { start: '1990-01-01', end: '1999-12-31' };
     }
-
     if (/80s|eighties|1980s|1980/.test(description)) {
       return { start: '1980-01-01', end: '1989-12-31' };
     }
-
     return undefined;
   }
 
@@ -263,7 +279,6 @@ export class TmdbService {
     const region = country?.toUpperCase();
     const regionProviders = region ? providersResponse.results?.[region] : undefined;
     const flatrate = regionProviders?.flatrate ?? [];
-
     return flatrate.map((provider) => provider.provider_name ?? 'Unknown').filter(Boolean);
   }
 
@@ -273,8 +288,7 @@ export class TmdbService {
       request.maxRuntime ? `It stays within ${request.maxRuntime} minutes.` : 'It was surfaced from broad discovery results.',
       request.country ? `The watch-provider lookup uses ${request.country}.` : 'Provider availability is based on the current lookup.',
     ];
-
-    return `${parts.join(' ')} Explanation will be refined once OpenAI is added.`;
+    return parts.join(' ');
   }
 
   private async requestJson<T>(url: string, params: Record<string, string> | URLSearchParams): Promise<T> {
@@ -317,3 +331,4 @@ export class TmdbService {
     }
   }
 }
+

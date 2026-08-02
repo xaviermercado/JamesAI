@@ -6,6 +6,13 @@ export interface OpenAiConfig {
   timeoutMs: number;
 }
 
+export interface RequestInterpretation {
+  searchQueries: string[];
+  keywords: string[];
+  genreIds: number[];
+  yearRange: { start: string; end: string } | null;
+}
+
 interface OpenAiRankingPayload {
   rankings: Array<{
     tmdbMovieId: number;
@@ -16,26 +23,25 @@ interface OpenAiRankingPayload {
 function buildFallbackRecommendations(request: RecommendationRequest, candidates: MovieCandidate[]): MovieRecommendation[] {
   return candidates.slice(0, 5).map((candidate) => ({
     ...candidate,
-    explanation: `Temporary explanation based on the request: ${request.description}`,
+    explanation: `Matches your request: ${request.description}`,
   }));
 }
+
+const CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 
 export class OpenAiService {
   constructor(private readonly config: OpenAiConfig) {}
 
-  async rankCandidates(
-    request: RecommendationRequest,
-    candidates: MovieCandidate[],
-  ): Promise<MovieRecommendation[]> {
-    if (!this.config.apiKey || this.config.apiKey === 'missing-key') {
-      return buildFallbackRecommendations(request, candidates);
-    }
+  private get isConfigured(): boolean {
+    return Boolean(this.config.apiKey) && this.config.apiKey !== 'missing-key';
+  }
 
+  private async chatJson<T>(messages: Array<{ role: string; content: string }>): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/responses.create', {
+      const response = await fetch(CHAT_COMPLETIONS_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
@@ -43,19 +49,7 @@ export class OpenAiService {
         },
         body: JSON.stringify({
           model: this.config.model,
-          input: [
-            {
-              role: 'system',
-              content: 'You are ranking movie recommendations for a movie suggestion app. Return JSON with rankings array of {tmdbMovieId, explanation}. Prioritize the candidate that best matches the mood, runtime, genre, and era described by the user. Keep explanations concise and specific.',
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                request,
-                candidates: candidates.slice(0, 5),
-              }),
-            },
-          ],
+          messages,
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,
@@ -65,32 +59,86 @@ export class OpenAiService {
         throw new Error(`OpenAI request failed with status ${response.status}`);
       }
 
-      const payload = (await response.json()) as { output?: Array<{ content?: Array<{ text?: string }> }> };
-      const text = payload.output?.[0]?.content?.[0]?.text ?? '{}';
-      const parsed = JSON.parse(text) as OpenAiRankingPayload;
+      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const text = payload.choices?.[0]?.message?.content ?? '{}';
+      return JSON.parse(text) as T;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  // Phase 1: turn the user's free-text description into concrete TMDB search terms.
+  async interpretRequest(request: RecommendationRequest): Promise<RequestInterpretation | null> {
+    if (!this.isConfigured) return null;
+
+    try {
+      return await this.chatJson<RequestInterpretation>([
+        {
+          role: 'system',
+          content:
+            'You are a movie search assistant. Given a user description, return a JSON object with:\n' +
+            '- searchQueries: string[] — up to 4 specific movie or TV show title searches that best match the request (e.g. ["Dumbo", "Dumbo 2019"])\n' +
+            '- keywords: string[] — up to 4 short thematic keyword phrases for TMDB keyword search (e.g. ["flying elephant", "circus animal"])\n' +
+            '- genreIds: number[] — relevant TMDB genre IDs (28=Action,12=Adventure,16=Animation,35=Comedy,80=Crime,99=Documentary,18=Drama,10751=Family,14=Fantasy,36=History,27=Horror,10402=Music,9648=Mystery,10749=Romance,878=SciFi,10770=TV Movie,53=Thriller,10752=War,37=Western)\n' +
+            '- yearRange: {start:"YYYY-MM-DD",end:"YYYY-MM-DD"} | null — only if the user specifies a decade or era\n' +
+            'Be specific. For "movies about flying elephants" you should return searchQueries:["Dumbo"] not popular movies.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({ description: request.description, mediaType: request.mediaType ?? 'movie' }),
+        },
+      ]);
+    } catch {
+      return null;
+    }
+  }
+
+  async rankCandidates(
+    request: RecommendationRequest,
+    candidates: MovieCandidate[],
+  ): Promise<MovieRecommendation[]> {
+    if (!this.isConfigured) {
+      return buildFallbackRecommendations(request, candidates);
+    }
+
+    try {
+      const parsed = await this.chatJson<OpenAiRankingPayload>([
+        {
+          role: 'system',
+          content:
+            'You are ranking movie recommendations. Return JSON with a rankings array of {tmdbMovieId, explanation}. ' +
+            'Order from best to worst match. Only include movies that are a genuine match — drop any that are clearly irrelevant. ' +
+            'Keep explanations to one sentence, specific to why this matches the request.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({ request, candidates }),
+        },
+      ]);
+
       const rankingMap = new Map(parsed.rankings?.map((item) => [item.tmdbMovieId, item.explanation]) ?? []);
 
-      const rankedCandidates = [...candidates]
+      const ranked = [...candidates]
+        .filter((c) => rankingMap.has(c.tmdbMovieId))
         .sort((a, b) => {
-          const aRank = parsed.rankings?.find((item) => item.tmdbMovieId === a.tmdbMovieId);
-          const bRank = parsed.rankings?.find((item) => item.tmdbMovieId === b.tmdbMovieId);
-          const aIndex = aRank ? parsed.rankings.indexOf(aRank) : Number.MAX_SAFE_INTEGER;
-          const bIndex = bRank ? parsed.rankings.indexOf(bRank) : Number.MAX_SAFE_INTEGER;
+          const aIndex = parsed.rankings.findIndex((r) => r.tmdbMovieId === a.tmdbMovieId);
+          const bIndex = parsed.rankings.findIndex((r) => r.tmdbMovieId === b.tmdbMovieId);
           return aIndex - bIndex;
         })
         .slice(0, 5);
 
-      return rankedCandidates.map((candidate) => ({
+      // Fall back to unfiltered candidates if OpenAI dropped everything
+      const result = ranked.length > 0 ? ranked : candidates.slice(0, 5);
+
+      return result.map((candidate) => ({
         ...candidate,
-        explanation: rankingMap.get(candidate.tmdbMovieId) ?? `Temporary explanation based on the request: ${request.description}`,
+        explanation: rankingMap.get(candidate.tmdbMovieId) ?? `Matches your request: ${request.description}`,
       }));
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('OpenAI request timed out');
       }
       return buildFallbackRecommendations(request, candidates);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }
