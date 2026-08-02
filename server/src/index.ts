@@ -1,6 +1,6 @@
-import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import express from 'express';
 
 import { createRecommendationsRouter } from './routes/recommendations';
 import { OpenAiService } from './services/openai-service';

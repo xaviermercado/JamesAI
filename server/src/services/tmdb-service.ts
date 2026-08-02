@@ -1,9 +1,9 @@
 import { URL, URLSearchParams } from 'node:url';
 
 import type {
-  MovieCandidate,
-  RecommendationRequest,
-  RecommendationResponse,
+    MovieCandidate,
+    RecommendationRequest,
+    RecommendationResponse,
 } from '../types/recommendations';
 import { OpenAiService } from './openai-service';
 

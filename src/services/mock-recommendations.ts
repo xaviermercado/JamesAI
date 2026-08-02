@@ -1,8 +1,8 @@
 import type {
-  MovieRecommendation,
-  ParsedMovieCriteria,
-  RecommendationRequest,
-  RecommendationResponse,
+    MovieRecommendation,
+    ParsedMovieCriteria,
+    RecommendationRequest,
+    RecommendationResponse,
 } from '@/types/recommendations';
 
 const defaultCatalog: MovieRecommendation[] = [

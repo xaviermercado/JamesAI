@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Platform,
   Pressable,
   ScrollView,
@@ -30,9 +31,11 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [feedbackById, setFeedbackById] = useState<Record<number, FeedbackAction>>({});
   const [page, setPage] = useState(0);
   const [healthStatus, setHealthStatus] = useState<'ok' | 'error'>('error');
+  const advancedHeight = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loadHealthStatus = async () => {
@@ -44,6 +47,14 @@ export default function HomeScreen() {
     const interval = setInterval(loadHealthStatus, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    Animated.timing(advancedHeight, {
+      toValue: showAdvancedFilters ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [advancedHeight, showAdvancedFilters]);
 
   const submitRequest = async (nextPage = 0) => {
     if (!description.trim()) {
@@ -116,58 +127,78 @@ export default function HomeScreen() {
                 style={styles.textInput}
               />
 
-              <View style={styles.filterGrid}>
-                <View style={styles.filterGroup}>
-                  <ThemedText type="smallBold">Media</ThemedText>
-                  <View style={styles.pillRow}>
-                    <Pressable
-                      style={[styles.pill, mediaType === 'movie' && styles.pillActive]}
-                      onPress={() => setMediaType('movie')}>
-                      <ThemedText style={[styles.pillText, mediaType === 'movie' && styles.pillTextActive]}>
-                        Movies
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.pill, mediaType === 'tv' && styles.pillActive]}
-                      onPress={() => setMediaType('tv')}>
-                      <ThemedText style={[styles.pillText, mediaType === 'tv' && styles.pillTextActive]}>
-                        TV
-                      </ThemedText>
-                    </Pressable>
+              <Pressable
+                style={styles.advancedToggle}
+                onPress={() => setShowAdvancedFilters((current) => !current)}>
+                <ThemedText type="smallBold">Advanced search</ThemedText>
+                <ThemedText style={styles.advancedToggleText}>{showAdvancedFilters ? '−' : '+'}</ThemedText>
+              </Pressable>
+
+              <Animated.View
+                style={{
+                  overflow: 'hidden',
+                  maxHeight: advancedHeight.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 260],
+                  }),
+                  opacity: advancedHeight.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 1],
+                  }),
+                }}>
+                <View style={styles.filterGrid}>
+                  <View style={styles.filterGroup}>
+                    <ThemedText type="smallBold">Media</ThemedText>
+                    <View style={styles.pillRow}>
+                      <Pressable
+                        style={[styles.pill, mediaType === 'movie' && styles.pillActive]}
+                        onPress={() => setMediaType('movie')}>
+                        <ThemedText style={[styles.pillText, mediaType === 'movie' && styles.pillTextActive]}>
+                          Movies
+                        </ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.pill, mediaType === 'tv' && styles.pillActive]}
+                        onPress={() => setMediaType('tv')}>
+                        <ThemedText style={[styles.pillText, mediaType === 'tv' && styles.pillTextActive]}>
+                          TV
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.filterGroup}>
+                    <ThemedText type="smallBold">Max runtime (min)</ThemedText>
+                    <TextInput
+                      value={maxRuntime}
+                      onChangeText={setMaxRuntime}
+                      placeholder="120"
+                      keyboardType="numeric"
+                      style={styles.input}
+                    />
+                  </View>
+
+                  <View style={styles.filterGroup}>
+                    <ThemedText type="smallBold">Country</ThemedText>
+                    <TextInput
+                      value={country}
+                      onChangeText={setCountry}
+                      placeholder="United States"
+                      style={styles.input}
+                    />
+                  </View>
+
+                  <View style={styles.filterGroup}>
+                    <ThemedText type="smallBold">Streaming services</ThemedText>
+                    <TextInput
+                      value={streamingServices}
+                      onChangeText={setStreamingServices}
+                      placeholder="Netflix, Max"
+                      style={styles.input}
+                    />
                   </View>
                 </View>
-
-                <View style={styles.filterGroup}>
-                  <ThemedText type="smallBold">Max runtime (min)</ThemedText>
-                  <TextInput
-                    value={maxRuntime}
-                    onChangeText={setMaxRuntime}
-                    placeholder="120"
-                    keyboardType="numeric"
-                    style={styles.input}
-                  />
-                </View>
-
-                <View style={styles.filterGroup}>
-                  <ThemedText type="smallBold">Country</ThemedText>
-                  <TextInput
-                    value={country}
-                    onChangeText={setCountry}
-                    placeholder="United States"
-                    style={styles.input}
-                  />
-                </View>
-
-                <View style={styles.filterGroup}>
-                  <ThemedText type="smallBold">Streaming services</ThemedText>
-                  <TextInput
-                    value={streamingServices}
-                    onChangeText={setStreamingServices}
-                    placeholder="Netflix, Max"
-                    style={styles.input}
-                  />
-                </View>
-              </View>
+              </Animated.View>
 
               <Pressable style={styles.primaryButton} onPress={() => submitRequest(0)}>
                 <ThemedText style={styles.primaryButtonText}>Find something to watch</ThemedText>
@@ -281,6 +312,23 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     fontSize: 16,
     backgroundColor: '#ffffff',
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#d7dce3',
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    backgroundColor: '#f8fafc',
+  },
+  advancedToggleText: {
+    marginLeft: Spacing.two,
+    fontWeight: '700',
+    color: '#3c87f7',
   },
   filterGrid: {
     gap: Spacing.three,
