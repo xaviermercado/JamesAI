@@ -35,6 +35,10 @@ const baseEnvSchema = z.object({
 
 type BaseEnv = z.infer<typeof baseEnvSchema>;
 
+function normalizeUrlOrigin(value: string | undefined): string | undefined {
+  return value?.trim().replace(/\/$/, '') || undefined;
+}
+
 export interface DatabaseConfig {
   host: string;
   port: number;
@@ -156,8 +160,8 @@ export function loadAppConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConfi
     openAiApiKey: parsed.OPENAI_API_KEY?.trim() || undefined,
     openAiModel: parsed.OPENAI_MODEL,
     openAiTimeoutMs: parsed.OPENAI_TIMEOUT_MS,
-    frontendOrigin: parsed.FRONTEND_ORIGIN?.trim() || undefined,
-    appBaseUrl: parsed.APP_BASE_URL?.trim() || undefined,
+    frontendOrigin: normalizeUrlOrigin(parsed.FRONTEND_ORIGIN),
+    appBaseUrl: normalizeUrlOrigin(parsed.APP_BASE_URL),
     authCookieDomain: parsed.AUTH_COOKIE_DOMAIN?.trim() || undefined,
     authCookieSameSite: parsed.AUTH_COOKIE_SAME_SITE,
     emailProvider,
