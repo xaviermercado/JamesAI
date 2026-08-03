@@ -106,12 +106,12 @@ function ensureDatabaseConfig(env: BaseEnv): DatabaseConfig | null {
     throw new Error(`Missing required environment variables for MySQL-enabled mode: ${missing.join(', ')}`);
   }
 
-  if (env.NODE_ENV === 'production' && (env.MYSQL_SSL_MODE === 'disabled' || env.MYSQL_SSL_MODE === 'preferred')) {
-    throw new Error('MySQL TLS must use verify-ca or verify-full in production');
-  }
-
   if ((env.MYSQL_SSL_MODE === 'verify-ca' || env.MYSQL_SSL_MODE === 'verify-full') && !env.MYSQL_SSL_CA) {
     throw new Error('MYSQL_SSL_CA is required when MYSQL_SSL_MODE is verify-ca or verify-full');
+  }
+
+  if (env.NODE_ENV === 'production' && env.MYSQL_SSL_MODE === 'disabled') {
+    throw new Error('MySQL TLS cannot be disabled in production');
   }
 
   if (!emailProvider) {
