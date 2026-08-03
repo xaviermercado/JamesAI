@@ -1,11 +1,11 @@
 import { drizzle } from 'drizzle-orm/mysql2';
-import { createPool, type Pool, type PoolOptions } from 'mysql2/promise';
+import { createPool, type Pool, type PoolOptions } from 'mysql2';
 
 import type { DatabaseConfig } from '../config/env';
 import * as schema from './schema';
 
 export interface DatabaseConnection {
-  pool: Pool;
+  pool: ReturnType<Pool['promise']>;
   db: unknown;
 }
 
@@ -33,7 +33,7 @@ export function createDatabaseConnection(
     connectionLimit: config.connectionLimit,
     ssl: buildSslConfig(config),
     multipleStatements: options?.multipleStatements ?? false,
-  });
+  }).promise();
 
   const db = drizzle(pool, { schema, mode: 'default' });
 

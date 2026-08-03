@@ -1,4 +1,4 @@
-import type { Pool, PoolConnection } from 'mysql2/promise';
+import type { Pool } from 'mysql2';
 
 import type { AuthAccountStatus, SafeUser } from './auth-types';
 
@@ -72,7 +72,9 @@ export interface AuthRepositoryLike {
   invalidatePasswordResetTokensForUser(userId: string): Promise<void>;
 }
 
-type SqlExecutor = Pick<Pool | PoolConnection, 'query'>;
+type PromisePool = ReturnType<Pool['promise']>;
+type PromisePoolConnection = Awaited<ReturnType<PromisePool['getConnection']>>;
+type SqlExecutor = Pick<PromisePool, 'query'>;
 
 abstract class BaseAuthRepository implements AuthRepositoryLike {
   constructor(protected readonly executor: SqlExecutor) {}
@@ -203,7 +205,7 @@ class TransactionAuthRepository extends BaseAuthRepository {
 }
 
 export class AuthRepository extends BaseAuthRepository {
-  constructor(private readonly pool: Pool) {
+  constructor(private readonly pool: PromisePool) {
     super(pool);
   }
 

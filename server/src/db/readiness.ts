@@ -1,11 +1,13 @@
-import type { Pool } from 'mysql2/promise';
+import type { Pool } from 'mysql2';
+
+type PromisePool = ReturnType<Pool['promise']>;
 
 export interface DatabaseReadiness {
   status: 'ready' | 'not_configured' | 'unavailable';
 }
 
 export interface DatabaseReadinessContext {
-  pool: Pool | null;
+  pool: PromisePool | null;
 }
 
 export async function checkDatabaseReadiness(context: DatabaseReadinessContext): Promise<DatabaseReadiness> {

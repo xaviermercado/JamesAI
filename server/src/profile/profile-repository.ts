@@ -1,4 +1,6 @@
-import type { Pool } from 'mysql2/promise';
+import type { Pool } from 'mysql2';
+
+type PromisePool = ReturnType<Pool['promise']>;
 
 export interface StoredProfile {
   user_id: string;
@@ -27,7 +29,7 @@ export interface ProfileRepositoryLike {
 }
 
 export class ProfileRepository implements ProfileRepositoryLike {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: PromisePool) {}
 
   async findByUserId(userId: string): Promise<StoredProfile | null> {
     const [rows] = await this.pool.query(
