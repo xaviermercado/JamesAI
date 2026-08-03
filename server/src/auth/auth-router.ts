@@ -9,6 +9,7 @@ import { emailOnlySchema, loginSchema, registerSchema, resetPasswordSchema, veri
 import type { AuthRepositoryLike } from './auth-repository';
 import { AuthService } from './auth-service';
 import type { EmailService } from '../email/email-service';
+import { logger } from '../utils/logger';
 
 function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
   if (!cookieHeader) {
@@ -58,6 +59,15 @@ function requireCsrf(req: Request, res: Response, sessionTokenHash: string, conf
   return true;
 }
 
+function logAuthRouteError(route: string, req: Request, error: unknown): void {
+  logger.error('auth.route_error', {
+    route,
+    method: req.method,
+    path: req.path,
+    error,
+  });
+}
+
 export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLike, emailService?: EmailService) {
   const router = express.Router();
   const authService = new AuthService(repository, config, emailService);
@@ -97,6 +107,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       const result = await authService.register(parsed.data);
       return res.status(201).json({ user: result.user });
     } catch (error) {
+      logAuthRouteError('/register', req, error);
       if (error instanceof Error && /duplicate email/i.test(error.message)) {
         return res.status(409).json({ error: 'An account with this email already exists. Sign in or reset your password.' });
       }
@@ -114,7 +125,8 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
     try {
       await authService.verifyEmail(parsed.data.token);
       return res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      logAuthRouteError('/verify-email', req, error);
       return res.status(400).json({ error: 'Verification token is invalid or expired' });
     }
   });
@@ -125,8 +137,13 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     }
 
-    await authService.resendVerification(parsed.data.email);
-    return res.json({ ok: true });
+    try {
+      await authService.resendVerification(parsed.data.email);
+      return res.json({ ok: true });
+    } catch (error) {
+      logAuthRouteError('/resend-verification', req, error);
+      return res.status(500).json({ error: 'Unable to send verification email' });
+    }
   });
 
   router.post('/forgot-password', async (req, res) => {
@@ -135,8 +152,13 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
     }
 
-    await authService.forgotPassword(parsed.data.email);
-    return res.json({ ok: true });
+    try {
+      await authService.forgotPassword(parsed.data.email);
+      return res.json({ ok: true });
+    } catch (error) {
+      logAuthRouteError('/forgot-password', req, error);
+      return res.status(500).json({ error: 'Unable to send password reset email' });
+    }
   });
 
   router.post('/reset-password', async (req, res) => {
@@ -148,7 +170,8 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
     try {
       await authService.resetPassword(parsed.data.token, parsed.data.password);
       return res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      logAuthRouteError('/reset-password', req, error);
       return res.status(400).json({ error: 'Password reset token is invalid or expired' });
     }
   });
@@ -172,7 +195,8 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
 
       setSessionCookie(res, result.sessionToken, config);
       return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken });
-    } catch {
+    } catch (error) {
+      logAuthRouteError('/login', req, error);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
   });
@@ -191,7 +215,8 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       }
 
       return res.json({ authenticated: true, user: restored.user, csrfToken: restored.identity.csrfToken });
-    } catch {
+    } catch (error) {
+      logAuthRouteError('/session', req, error);
       clearSessionCookie(res, config);
       return res.json({ authenticated: false, user: null, csrfToken: null });
     }
@@ -215,9 +240,14 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       return undefined;
     }
 
-    await authService.logout(sessionToken);
-    clearSessionCookie(res, config);
-    return res.json({ ok: true });
+    try {
+      await authService.logout(sessionToken);
+      clearSessionCookie(res, config);
+      return res.json({ ok: true });
+    } catch (error) {
+      logAuthRouteError('/logout', req, error);
+      return res.status(500).json({ error: 'Unable to sign out right now' });
+    }
   });
 
   router.post('/logout-all', async (req, res) => {
@@ -237,9 +267,14 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       return undefined;
     }
 
-    await authService.logoutAll(restored.identity.userId);
-    clearSessionCookie(res, config);
-    return res.json({ ok: true });
+    try {
+      await authService.logoutAll(restored.identity.userId);
+      clearSessionCookie(res, config);
+      return res.json({ ok: true });
+    } catch (error) {
+      logAuthRouteError('/logout-all', req, error);
+      return res.status(500).json({ error: 'Unable to revoke sessions right now' });
+    }
   });
 
   return router;

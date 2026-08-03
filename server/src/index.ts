@@ -12,6 +12,7 @@ import { ProfileRepository } from './profile/profile-repository';
 import { createRecommendationsRouter } from './routes/recommendations';
 import { OpenAiService } from './services/openai-service';
 import { TmdbService } from './services/tmdb-service';
+import { logger } from './utils/logger';
 
 dotenv.config();
 
@@ -29,8 +30,33 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  const startedAt = Date.now();
+  const requestId = `${startedAt}-${Math.round(Math.random() * 1_000_000)}`;
+
+  res.setHeader('x-request-id', requestId);
+  res.on('finish', () => {
+    const elapsedMs = Date.now() - startedAt;
+    logger.info('api.request', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: elapsedMs,
+      origin: req.headers.origin ?? null,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
+  });
+
   next();
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('process.unhandledRejection', { error: reason });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('process.uncaughtException', { error });
 });
 
 if (!tmdbToken) {
