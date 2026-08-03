@@ -20,6 +20,7 @@ export async function getRecommendations(request: RecommendationRequest): Promis
   try {
     const response = await fetch(`${API_BASE_URL}/api/recommendations`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },

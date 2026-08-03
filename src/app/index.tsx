@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'expo-router';
 import {
   ActivityIndicator,
   Animated,
@@ -106,6 +107,12 @@ export default function HomeScreen() {
             <ThemedText themeColor="textSecondary" style={styles.subtitle}>
               Describe the mood, vibe, or occasion and we will surface five movies that feel right.
             </ThemedText>
+
+            <Link href="/explore" asChild>
+              <Pressable style={styles.accountButton}>
+                <ThemedText style={styles.accountButtonText}>Sign in or manage account</ThemedText>
+              </Pressable>
+            </Link>
 
             <ThemedView
               type="backgroundElement"
@@ -280,6 +287,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 28,
     textAlign: Platform.select({ web: 'center' }) ?? 'left',
+  },
+  accountButton: {
+    alignSelf: Platform.select({ web: 'center' }) ?? 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    backgroundColor: '#e8edf6',
+  },
+  accountButtonText: {
+    color: '#334155',
+    fontWeight: '700',
   },
   statusBanner: {
     borderRadius: 999,

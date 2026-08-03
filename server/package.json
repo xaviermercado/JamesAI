@@ -6,21 +6,31 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "argon2": "^0.45.1",
     "cors": "^2.8.6",
     "dotenv": "^16.4.2",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.6.1",
+    "mysql2": "^3.23.2",
+    "nodemailer": "^9.0.3",
+    "supertest": "^7.2.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.1",
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/supertest": "^7.2.1",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.4",
     "typescript": "~6.0.3",
     "vitest": "^2.1.8"

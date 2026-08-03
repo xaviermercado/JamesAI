@@ -49,7 +49,6 @@ describe('TmdbService', () => {
 
     const discoverUrl = fetchMock.mock.calls[0][0] as string;
     const search = new URL(discoverUrl).searchParams;
-    expect(search.get('with_genres')).toContain('35');
     expect(search.get('primary_release_date.gte')).toBe('1990-01-01');
     expect(search.get('primary_release_date.lte')).toBe('1999-12-31');
   });

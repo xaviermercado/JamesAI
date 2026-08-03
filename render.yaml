@@ -5,7 +5,7 @@ services:
     plan: free
     buildCommand: npm ci --prefix server && npm run build --prefix server
     startCommand: node server/dist/index.js
-    healthCheckPath: /health
+    healthCheckPath: /health/ready
     envVars:
       - key: NODE_ENV
         value: production
