@@ -84,14 +84,31 @@ Root/local frontend and backend development:
 - `DATABASE_CONNECTION_LIMIT`
 - `SESSION_TOKEN_PEPPER`
 - `EMAIL_PROVIDER`
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_SECURE`
+- `EMAIL_USER`
 - `EMAIL_FROM`
 - `EMAIL_API_KEY`
+
+Email can run in console mode for local development or SMTP mode in production. Console mode prints verification and reset links in the server logs. SMTP mode requires the mail host, port, username, API key or password, and sender address.
 
 Render backend:
 
 - Set the MySQL variables above in Render environment variables.
 - Use a production `MYSQL_SSL_MODE` of `verify-ca` or `verify-full`.
 - Keep `DATABASE_CONNECTION_LIMIT` small for the chosen Render plan.
+
+Render email setup:
+
+- Set `EMAIL_PROVIDER=smtp`.
+- Set `EMAIL_HOST=mail.jamesnarvey.ca`.
+- Set `EMAIL_PORT=465`.
+- Set `EMAIL_SECURE=true`.
+- Set `EMAIL_USER=do.not.reply@jamesnarvey.ca`.
+- Set `EMAIL_FROM=James AI <do.not.reply@jamesnarvey.ca>`.
+- Set `EMAIL_API_KEY` to the mailbox password in Render only.
+- Keep `EMAIL_PROVIDER=console` for local development if you want verification and reset links printed to the server logs instead of sent by email.
 
 HostGator frontend build:
 
