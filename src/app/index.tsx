@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'expo-router';
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuthSession } from '@/components/auth-session-provider';
 import { RecommendationCard } from '@/components/recommendation-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -23,6 +24,7 @@ import type { MediaType, MovieRecommendation, RecommendationRequest } from '@/ty
 type FeedbackAction = 'like' | 'dislike' | 'watched';
 
 export default function HomeScreen() {
+  const { status } = useAuthSession();
   const [description, setDescription] = useState('Something funny but not stupid, under two hours, preferably from the 90s, for a date night.');
   const [mediaType, setMediaType] = useState<MediaType>('movie');
   const [maxRuntime, setMaxRuntime] = useState('');
@@ -36,7 +38,7 @@ export default function HomeScreen() {
   const [feedbackById, setFeedbackById] = useState<Record<number, FeedbackAction>>({});
   const [page, setPage] = useState(0);
   const [healthStatus, setHealthStatus] = useState<'ok' | 'error'>('error');
-  const advancedHeight = useRef(new Animated.Value(0)).current;
+  const [advancedHeight] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loadHealthStatus = async () => {
@@ -108,11 +110,28 @@ export default function HomeScreen() {
               Describe the mood, vibe, or occasion and we will surface five movies that feel right.
             </ThemedText>
 
-            <Link href="/explore" asChild>
-              <Pressable style={styles.accountButton}>
-                <ThemedText style={styles.accountButtonText}>Sign in or manage account</ThemedText>
-              </Pressable>
-            </Link>
+            <View style={styles.accountActions}>
+              {status === 'authenticated' ? (
+                <Link href={'/profile' as never} asChild>
+                  <Pressable style={styles.accountButtonPrimary}>
+                    <ThemedText style={styles.accountButtonPrimaryText}>View profile</ThemedText>
+                  </Pressable>
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" asChild>
+                    <Pressable style={styles.accountButton}>
+                      <ThemedText style={styles.accountButtonText}>Log in</ThemedText>
+                    </Pressable>
+                  </Link>
+                  <Link href="/signup" asChild>
+                    <Pressable style={styles.accountButtonPrimary}>
+                      <ThemedText style={styles.accountButtonPrimaryText}>Create account</ThemedText>
+                    </Pressable>
+                  </Link>
+                </>
+              )}
+            </View>
 
             <ThemedView
               type="backgroundElement"
@@ -288,8 +307,13 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     textAlign: Platform.select({ web: 'center' }) ?? 'left',
   },
-  accountButton: {
+  accountActions: {
     alignSelf: Platform.select({ web: 'center' }) ?? 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  accountButton: {
     borderRadius: 999,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
@@ -297,6 +321,16 @@ const styles = StyleSheet.create({
   },
   accountButtonText: {
     color: '#334155',
+    fontWeight: '700',
+  },
+  accountButtonPrimary: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    backgroundColor: '#3c87f7',
+  },
+  accountButtonPrimaryText: {
+    color: '#ffffff',
     fontWeight: '700',
   },
   statusBanner: {

@@ -1,43 +1,56 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-import { getAuthSession, type AuthSessionResponse, type SafeUser } from '@/services/auth-api';
+import { getAuthSession } from '@/services/auth-api';
+import type { AuthSessionResponse, SafeUser } from '@/types/auth';
 
 interface AuthSessionContextValue {
-  status: 'loading' | 'authenticated' | 'unauthenticated';
+  status: 'initializing' | 'authenticated' | 'anonymous';
   user: SafeUser | null;
   csrfToken: string | null;
   refreshSession: () => Promise<void>;
+  applySession: (session: AuthSessionResponse) => void;
+  clearSession: () => void;
 }
 
 const AuthSessionContext = createContext<AuthSessionContextValue | null>(null);
 
 export function AuthSessionProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthSessionContextValue['status']>('loading');
+  const [status, setStatus] = useState<AuthSessionContextValue['status']>('initializing');
   const [user, setUser] = useState<SafeUser | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  const refreshSession = async () => {
+  const applySession = useCallback((session: AuthSessionResponse) => {
+    setStatus(session.authenticated ? 'authenticated' : 'anonymous');
+    setUser(session.user);
+    setCsrfToken(session.csrfToken);
+  }, []);
+
+  const clearSession = useCallback(() => {
+    setStatus('anonymous');
+    setUser(null);
+    setCsrfToken(null);
+  }, []);
+
+  const refreshSession = useCallback(async () => {
     try {
       const session = await getAuthSession();
       applySession(session);
     } catch {
-      setStatus('unauthenticated');
-      setUser(null);
-      setCsrfToken(null);
+      clearSession();
     }
-  };
-
-  const applySession = (session: AuthSessionResponse) => {
-    setStatus(session.authenticated ? 'authenticated' : 'unauthenticated');
-    setUser(session.user);
-    setCsrfToken(session.csrfToken);
-  };
+  }, [applySession, clearSession]);
 
   useEffect(() => {
-    void refreshSession();
-  }, []);
+    const timeoutId = setTimeout(() => {
+      void refreshSession();
+    }, 0);
 
-  return <AuthSessionContext.Provider value={{ status, user, csrfToken, refreshSession }}>{children}</AuthSessionContext.Provider>;
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [refreshSession]);
+
+  return <AuthSessionContext.Provider value={{ status, user, csrfToken, refreshSession, applySession, clearSession }}>{children}</AuthSessionContext.Provider>;
 }
 
 export function useAuthSession() {

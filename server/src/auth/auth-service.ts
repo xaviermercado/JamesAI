@@ -16,6 +16,8 @@ import { toSafeUser } from './auth-repository';
 import type { AuthIdentity, AuthSessionResponse, SafeUser } from './auth-types';
 
 export interface RegisterInput {
+  firstName?: string;
+  lastName?: string;
   email: string;
   password: string;
 }
@@ -52,6 +54,15 @@ function isVerified(user: StoredUser): boolean {
   return user.account_status === 'active' && user.email_verified_at !== null;
 }
 
+function buildDisplayName(firstName: string | undefined, lastName: string | undefined, email: string): string {
+  const fullName = [firstName?.trim(), lastName?.trim()].filter(Boolean).join(' ').trim();
+  if (fullName) {
+    return fullName.slice(0, 80);
+  }
+
+  return email.split('@')[0].slice(0, 80) || 'JamesAI user';
+}
+
 export class AuthService {
   constructor(
     private readonly repo: AuthRepositoryLike,
@@ -64,6 +75,9 @@ export class AuthService {
     const now = new Date();
     const userId = randomUUID();
     const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
+    const firstName = input.firstName?.trim() || null;
+    const lastName = input.lastName?.trim() || null;
+    const displayName = buildDisplayName(firstName ?? undefined, lastName ?? undefined, normalizedEmail);
 
     const verificationUrl = await this.repo.withTransaction(async (repository) => {
       const existingUser = await repository.findUserByEmail(normalizedEmail);
@@ -77,6 +91,21 @@ export class AuthService {
         password_hash: passwordHash,
         account_status: 'pending_verification',
         email_verified_at: null,
+        created_at: now,
+        updated_at: now,
+      });
+
+      await repository.createProfile({
+        user_id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        display_name: displayName,
+        country_code: 'US',
+        avatar_url: null,
+        letterboxd_username: null,
+        letterboxd_profile_url: null,
+        tvtime_username: null,
+        tvtime_profile_url: null,
         created_at: now,
         updated_at: now,
       });

@@ -7,6 +7,7 @@ import type { EmailService } from '../email/email-service';
 import { createAuthRouter } from './auth-router';
 import type {
   AuthRepositoryLike,
+  StoredProfileSeed,
   SessionWithUser,
   StoredEmailVerificationToken,
   StoredPasswordResetToken,
@@ -16,6 +17,8 @@ import type {
 
 class InMemoryAuthRepository implements AuthRepositoryLike {
   users = new Map<string, StoredUser>();
+
+  profiles = new Map<string, StoredProfileSeed>();
 
   sessions = new Map<string, StoredSession>();
 
@@ -41,6 +44,10 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
     }
 
     this.users.set(user.user_id, user);
+  }
+
+  async createProfile(profile: StoredProfileSeed): Promise<void> {
+    this.profiles.set(profile.user_id, profile);
   }
 
   async updateUserEmailVerification(userId: string, emailVerifiedAt: Date, accountStatus: StoredUser['account_status']): Promise<void> {
@@ -221,14 +228,18 @@ describe('auth router', () => {
     const response = await request(app)
       .post('/api/auth/register')
       .set('Origin', 'https://app.example.com')
-      .send({ email: ' User@Example.com ', password: 'password-password' });
+      .send({ firstName: 'José', lastName: 'Nuñez-Smith', email: ' User@Example.com ', password: 'password-password' });
 
     expect(response.status).toBe(201);
     expect(response.body.user.email).toBe('user@example.com');
 
     const storedUser = [...repository.users.values()][0];
+    const storedProfile = [...repository.profiles.values()][0];
     expect(storedUser.email).toBe('user@example.com');
     expect(storedUser.password_hash).not.toBe('password-password');
+    expect(storedProfile.first_name).toBe('José');
+    expect(storedProfile.last_name).toBe('Nuñez-Smith');
+    expect(storedProfile.display_name).toBe('José Nuñez-Smith');
     expect(emailService.verificationUrls).toHaveLength(1);
   });
 

@@ -86,6 +86,8 @@ export const profiles = mysqlTable(
   'profiles',
   {
     userId: char('user_id', { length: 36 }).notNull(),
+    firstName: varchar('first_name', { length: 80 }),
+    lastName: varchar('last_name', { length: 80 }),
     displayName: varchar('display_name', { length: 80 }).notNull(),
     countryCode: char('country_code', { length: 2 }).notNull(),
     avatarUrl: varchar('avatar_url', { length: 2048 }),

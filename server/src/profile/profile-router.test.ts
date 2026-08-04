@@ -6,6 +6,7 @@ import type { AppConfig } from '../config/env';
 import { AUTH_SESSION_COOKIE_NAME, createCsrfToken, createSessionToken, hashSessionToken } from '../auth/auth-crypto';
 import type {
   AuthRepositoryLike,
+  StoredProfileSeed,
   SessionWithUser,
   StoredEmailVerificationToken,
   StoredPasswordResetToken,
@@ -19,6 +20,8 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
   users = new Map<string, StoredUser>();
 
   sessions = new Map<string, StoredSession>();
+
+  profiles = new Map<string, StoredProfileSeed>();
 
   async withTransaction<T>(operation: (repository: AuthRepositoryLike) => Promise<T>): Promise<T> {
     return operation(this);
@@ -34,6 +37,10 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
 
   async createUser(user: StoredUser): Promise<void> {
     this.users.set(user.user_id, user);
+  }
+
+  async createProfile(profile: StoredProfileSeed): Promise<void> {
+    this.profiles.set(profile.user_id, profile);
   }
 
   async updateUserEmailVerification(userId: string, emailVerifiedAt: Date, accountStatus: StoredUser['account_status']): Promise<void> {
@@ -134,6 +141,8 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
 class InMemoryProfileRepository implements ProfileRepositoryLike {
   profiles = new Map<string, StoredProfile>();
 
+  streamingServices = new Map<string, Array<{ providerId: number; providerName: string }>>();
+
   async findByUserId(userId: string): Promise<StoredProfile | null> {
     return this.profiles.get(userId) ?? null;
   }
@@ -141,6 +150,8 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
   async upsert(userId: string, input: UpsertProfileInput): Promise<StoredProfile> {
     const profile: StoredProfile = {
       user_id: userId,
+      first_name: input.firstName,
+      last_name: input.lastName,
       display_name: input.displayName,
       country_code: input.countryCode,
       avatar_url: input.avatarUrl,
@@ -152,6 +163,15 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
 
     this.profiles.set(userId, profile);
     return profile;
+  }
+
+  async listStreamingServices(userId: string): Promise<Array<{ providerId: number; providerName: string }>> {
+    return this.streamingServices.get(userId) ?? [];
+  }
+
+  async replaceStreamingServices(userId: string, _countryCode: string, services: Array<{ providerId: number; providerName: string }>): Promise<Array<{ providerId: number; providerName: string }>> {
+    this.streamingServices.set(userId, services);
+    return services;
   }
 }
 
@@ -252,6 +272,8 @@ describe('profile router', () => {
       .set('Origin', 'https://app.example.com')
       .set('Cookie', session.cookie)
       .send({
+        firstName: 'James',
+        lastName: 'Narvey',
         displayName: 'James',
         countryCode: 'US',
       });
@@ -269,6 +291,8 @@ describe('profile router', () => {
       .set('Cookie', session.cookie)
       .set('X-CSRF-Token', session.csrfToken)
       .send({
+        firstName: 'James',
+        lastName: 'Narvey',
         displayName: 'James AI',
         countryCode: 'us',
         avatarUrl: 'https://example.com/avatar.png',
@@ -276,6 +300,8 @@ describe('profile router', () => {
       });
 
     expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.profile.firstName).toBe('James');
+    expect(patchResponse.body.profile.lastName).toBe('Narvey');
     expect(patchResponse.body.profile.displayName).toBe('James AI');
     expect(patchResponse.body.profile.countryCode).toBe('US');
 
@@ -288,5 +314,35 @@ describe('profile router', () => {
     expect(getResponse.body.profile.displayName).toBe('James AI');
     expect(getResponse.body.profile.avatarUrl).toBe('https://example.com/avatar.png');
     expect(getResponse.body.profile.tvtimeUsername).toBeNull();
+  });
+
+  it('loads and updates current-user streaming services only', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const patchResponse = await request(app)
+      .patch('/api/profile/streaming-services')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ providerIds: [8, 9] });
+
+    expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.services).toEqual([
+      { providerId: 8, providerName: 'Netflix' },
+      { providerId: 9, providerName: 'Prime Video' },
+    ]);
+
+    const getResponse = await request(app)
+      .get('/api/profile/streaming-services')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie);
+
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.body.services).toEqual([
+      { providerId: 8, providerName: 'Netflix' },
+      { providerId: 9, providerName: 'Prime Video' },
+    ]);
+    expect(getResponse.body.catalog.length).toBeGreaterThan(0);
   });
 });

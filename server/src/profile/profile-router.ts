@@ -5,10 +5,19 @@ import type { AppConfig } from '../config/env';
 import { AuthService } from '../auth/auth-service';
 import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
-import { updateProfileSchema } from './profile-schemas';
+import { streamingServiceCatalog, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
 import type { ProfileRepositoryLike } from './profile-repository';
 import { toApiProfile } from './profile-repository';
 import { logger } from '../utils/logger';
+
+function buildDisplayName(firstName: string, lastName: string, displayName: string | null | undefined): string {
+  const explicit = displayName?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  return `${firstName.trim()} ${lastName.trim()}`.trim();
+}
 
 function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
   if (!cookieHeader) {
@@ -121,7 +130,9 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       }
 
       const saved = await profileRepository.upsert(restored.identity.userId, {
-        displayName: parsed.data.displayName,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        displayName: buildDisplayName(parsed.data.firstName, parsed.data.lastName, parsed.data.displayName),
         countryCode: parsed.data.countryCode,
         avatarUrl: parsed.data.avatarUrl ?? null,
         letterboxdUsername: parsed.data.letterboxdUsername ?? null,
@@ -134,6 +145,68 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
     } catch (error) {
       logProfileRouteError('/', req, error);
       return res.status(500).json({ error: 'Unable to save profile right now' });
+    }
+  });
+
+  router.get('/streaming-services', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const services = await profileRepository.listStreamingServices(restored.identity.userId);
+      return res.json({
+        services,
+        catalog: streamingServiceCatalog,
+      });
+    } catch (error) {
+      logProfileRouteError('/streaming-services', req, error);
+      return res.status(500).json({ error: 'Unable to load streaming services right now' });
+    }
+  });
+
+  router.patch('/streaming-services', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      if (!requireCsrf(req, res, restored.identity.sessionTokenHash, config)) {
+        return undefined;
+      }
+
+      const parsed = updateStreamingServicesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      }
+
+      const profile = await profileRepository.findByUserId(restored.identity.userId);
+      const serviceSelections = parsed.data.providerIds
+        .map((providerId) => streamingServiceCatalog.find((item) => item.providerId === providerId))
+        .filter((item): item is (typeof streamingServiceCatalog)[number] => Boolean(item));
+
+      const services = await profileRepository.replaceStreamingServices(
+        restored.identity.userId,
+        profile?.country_code ?? 'US',
+        serviceSelections,
+      );
+
+      return res.json({ services, catalog: streamingServiceCatalog });
+    } catch (error) {
+      logProfileRouteError('/streaming-services', req, error);
+      return res.status(500).json({ error: 'Unable to save streaming services right now' });
     }
   });
 
