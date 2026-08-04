@@ -1,0 +1,14 @@
+DirectoryIndex index.html
+RewriteEngine On
+
+# Serve existing files and directories directly.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Map clean route URLs to Expo's exported .html files.
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+
+# Fall back to the root document for client-side navigation.
+RewriteRule ^ index.html [L]

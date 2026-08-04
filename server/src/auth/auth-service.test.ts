@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 
 import type { AppConfig } from '../config/env';
 import type {
@@ -11,6 +12,7 @@ import type {
   StoredUser,
 } from './auth-repository';
 import { AuthService } from './auth-service';
+import { hashSessionToken } from './auth-crypto';
 
 class TransactionalRepo implements AuthRepositoryLike {
   users = new Map<string, StoredUser>();
@@ -56,7 +58,12 @@ class TransactionalRepo implements AuthRepositoryLike {
   }
 
   async updateUserEmailVerification(): Promise<void> {}
-  async updateUserPasswordHash(): Promise<void> {}
+  async updateUserPasswordHash(userId: string, passwordHash: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.password_hash = passwordHash;
+    }
+  }
   async createSession(): Promise<void> {}
   async findActiveSessionByTokenHash(): Promise<SessionWithUser | null> { return null; }
   async touchSessionLastUsedAt(): Promise<void> {}
@@ -68,10 +75,25 @@ class TransactionalRepo implements AuthRepositoryLike {
   async findEmailVerificationTokenByHash(): Promise<StoredEmailVerificationToken | null> { return null; }
   async markEmailVerificationTokenUsed(): Promise<void> {}
   async invalidateEmailVerificationTokensForUser(): Promise<void> {}
-  async createPasswordResetToken(): Promise<void> {}
-  async findPasswordResetTokenByHash(): Promise<StoredPasswordResetToken | null> { return null; }
-  async markPasswordResetTokenUsed(): Promise<void> {}
-  async invalidatePasswordResetTokensForUser(): Promise<void> {}
+  async createPasswordResetToken(token: Omit<StoredPasswordResetToken, 'used_at' | 'created_at'> & { used_at?: Date | null; created_at?: Date }): Promise<void> {
+    this.passwordTokens.set(token.token_id, { ...token, used_at: token.used_at ?? null, created_at: token.created_at ?? new Date() });
+  }
+  async findPasswordResetTokenByHash(tokenHash: string): Promise<StoredPasswordResetToken | null> {
+    return [...this.passwordTokens.values()].find((token) => token.token_hash === tokenHash) ?? null;
+  }
+  async markPasswordResetTokenUsed(tokenId: string): Promise<void> {
+    const token = this.passwordTokens.get(tokenId);
+    if (token) {
+      token.used_at = new Date();
+    }
+  }
+  async invalidatePasswordResetTokensForUser(userId: string): Promise<void> {
+    for (const token of this.passwordTokens.values()) {
+      if (token.user_id === userId && token.used_at === null) {
+        token.used_at = new Date();
+      }
+    }
+  }
 }
 
 function createConfig(): AppConfig {
@@ -110,5 +132,91 @@ describe('AuthService register transaction', () => {
     expect(repo.users.size).toBe(0);
     expect(repo.profiles.size).toBe(0);
     expect(repo.emailTokens.size).toBe(0);
+  });
+
+  it('classifies missing password reset tokens as not_found', async () => {
+    const repo = new TransactionalRepo();
+    const service = new AuthService(repo, createConfig(), {
+      sendVerificationEmail: async () => undefined,
+      sendPasswordResetEmail: async () => undefined,
+    });
+
+    await expect(service.resetPassword('missing-token', 'password-password')).rejects.toMatchObject({
+      name: 'AuthTokenStateError',
+      tokenPurpose: 'password_reset',
+      tokenReason: 'not_found',
+    });
+  });
+
+  it('classifies expired password reset tokens as expired', async () => {
+    const repo = new TransactionalRepo();
+    const config = createConfig();
+    const service = new AuthService(repo, config, {
+      sendVerificationEmail: async () => undefined,
+      sendPasswordResetEmail: async () => undefined,
+    });
+    const userId = randomUUID();
+    const rawToken = 'expired-reset-token';
+
+    repo.users.set(userId, {
+      user_id: userId,
+      email: 'user@example.com',
+      password_hash: 'hash',
+      email_verified_at: new Date(),
+      account_status: 'active',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    repo.passwordTokens.set(randomUUID(), {
+      token_id: randomUUID(),
+      user_id: userId,
+      token_hash: hashSessionToken(rawToken, config.emailTokenPepper ?? ''),
+      expires_at: new Date(Date.now() - 1_000),
+      used_at: null,
+      created_at: new Date(),
+    });
+
+    await expect(service.resetPassword(rawToken, 'password-password')).rejects.toMatchObject({
+      name: 'AuthTokenStateError',
+      tokenPurpose: 'password_reset',
+      tokenReason: 'expired',
+    });
+  });
+
+  it('classifies superseded password reset tokens as used_or_superseded', async () => {
+    const repo = new TransactionalRepo();
+    const config = createConfig();
+    const service = new AuthService(repo, config, {
+      sendVerificationEmail: async () => undefined,
+      sendPasswordResetEmail: async () => undefined,
+    });
+    const userId = randomUUID();
+    const rawToken = 'used-reset-token';
+
+    repo.users.set(userId, {
+      user_id: userId,
+      email: 'user@example.com',
+      password_hash: 'hash',
+      email_verified_at: new Date(),
+      account_status: 'active',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    repo.passwordTokens.set(randomUUID(), {
+      token_id: randomUUID(),
+      user_id: userId,
+      token_hash: hashSessionToken(rawToken, config.emailTokenPepper ?? ''),
+      expires_at: new Date(Date.now() + 60_000),
+      used_at: new Date(),
+      created_at: new Date(),
+    });
+
+    await expect(service.resetPassword(rawToken, 'password-password')).rejects.toMatchObject({
+      name: 'AuthTokenStateError',
+      tokenPurpose: 'password_reset',
+      tokenReason: 'used_or_superseded',
+    });
   });
 });

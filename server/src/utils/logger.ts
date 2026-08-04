@@ -12,10 +12,17 @@ function normalizeError(error: unknown): unknown {
     return error;
   }
 
+  const details = Object.fromEntries(
+    Object.getOwnPropertyNames(error)
+      .filter((key) => !['name', 'message', 'stack'].includes(key))
+      .map((key) => [key, (error as unknown as Record<string, unknown>)[key]]),
+  );
+
   return {
     name: error.name,
     message: error.message,
     stack: error.stack,
+    ...details,
   };
 }
 

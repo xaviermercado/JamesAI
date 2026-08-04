@@ -33,6 +33,19 @@ export interface AuthServiceResult {
   identity?: AuthIdentity;
 }
 
+type TokenInvalidReason = 'not_found' | 'used_or_superseded' | 'expired';
+
+class AuthTokenStateError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenPurpose: 'password_reset' | 'email_verification',
+    public readonly tokenReason: TokenInvalidReason,
+  ) {
+    super(message);
+    this.name = 'AuthTokenStateError';
+  }
+}
+
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -220,15 +233,15 @@ export class AuthService {
 
   async verifyEmail(token: string): Promise<void> {
     await this.repo.withTransaction(async (repository) => {
-      const tokenRecord = await this.findValidVerificationToken(repository, token);
-      if (!tokenRecord) {
-        throw new Error('Verification token is invalid or expired');
+      const tokenState = await this.findVerificationTokenState(repository, token);
+      if (!tokenState.record) {
+        throw new AuthTokenStateError('Verification token is invalid or expired', 'email_verification', tokenState.reason);
       }
 
       const now = new Date();
-      await repository.markEmailVerificationTokenUsed(tokenRecord.token_id);
-      await repository.updateUserEmailVerification(tokenRecord.user_id, now, 'active');
-      await repository.invalidateEmailVerificationTokensForUser(tokenRecord.user_id);
+      await repository.markEmailVerificationTokenUsed(tokenState.record.token_id);
+      await repository.updateUserEmailVerification(tokenState.record.user_id, now, 'active');
+      await repository.invalidateEmailVerificationTokensForUser(tokenState.record.user_id);
     });
   }
 
@@ -262,15 +275,15 @@ export class AuthService {
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
     await this.repo.withTransaction(async (repository) => {
-      const tokenRecord = await this.findValidPasswordResetToken(repository, token);
-      if (!tokenRecord) {
-        throw new Error('Password reset token is invalid or expired');
+      const tokenState = await this.findPasswordResetTokenState(repository, token);
+      if (!tokenState.record) {
+        throw new AuthTokenStateError('Password reset token is invalid or expired', 'password_reset', tokenState.reason);
       }
 
-      await repository.updateUserPasswordHash(tokenRecord.user_id, passwordHash);
-      await repository.markPasswordResetTokenUsed(tokenRecord.token_id);
-      await repository.invalidatePasswordResetTokensForUser(tokenRecord.user_id);
-      await repository.revokeAllSessionsForUser(tokenRecord.user_id);
+      await repository.updateUserPasswordHash(tokenState.record.user_id, passwordHash);
+      await repository.markPasswordResetTokenUsed(tokenState.record.token_id);
+      await repository.invalidatePasswordResetTokensForUser(tokenState.record.user_id);
+      await repository.revokeAllSessionsForUser(tokenState.record.user_id);
     });
   }
 
@@ -304,24 +317,40 @@ export class AuthService {
     });
   }
 
-  private async findValidVerificationToken(repository: AuthRepositoryLike, token: string): Promise<StoredEmailVerificationToken | null> {
+  private async findVerificationTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredEmailVerificationToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
     const record = await repository.findEmailVerificationTokenByHash(tokenHash);
-    if (!record || record.used_at || record.expires_at.getTime() <= Date.now()) {
-      return null;
+    if (!record) {
+      return { record: null, reason: 'not_found' };
     }
 
-    return record;
+    if (record.used_at) {
+      return { record: null, reason: 'used_or_superseded' };
+    }
+
+    if (record.expires_at.getTime() <= Date.now()) {
+      return { record: null, reason: 'expired' };
+    }
+
+    return { record, reason: 'not_found' };
   }
 
-  private async findValidPasswordResetToken(repository: AuthRepositoryLike, token: string): Promise<StoredPasswordResetToken | null> {
+  private async findPasswordResetTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredPasswordResetToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
     const record = await repository.findPasswordResetTokenByHash(tokenHash);
-    if (!record || record.used_at || record.expires_at.getTime() <= Date.now()) {
-      return null;
+    if (!record) {
+      return { record: null, reason: 'not_found' };
     }
 
-    return record;
+    if (record.used_at) {
+      return { record: null, reason: 'used_or_superseded' };
+    }
+
+    if (record.expires_at.getTime() <= Date.now()) {
+      return { record: null, reason: 'expired' };
+    }
+
+    return { record, reason: 'not_found' };
   }
 
   private async mustGetUser(userId: string): Promise<StoredUser> {
