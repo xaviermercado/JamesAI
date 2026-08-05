@@ -1,6 +1,7 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import { createHmac } from 'node:crypto';
 
 import { loadAppConfig } from './config/env';
 import { createDatabaseConnection } from './db/client';
@@ -18,6 +19,16 @@ dotenv.config();
 
 const app = express();
 const config = loadAppConfig(process.env);
+
+// Log the first 8 chars of a known-input hash so we can compare pepper consistency between environments.
+const emailPepperFingerprint = config.emailTokenPepper
+  ? createHmac('sha256', config.emailTokenPepper).update('canary').digest('hex').slice(0, 8)
+  : 'not-set';
+const sessionPepperFingerprint = config.sessionTokenPepper
+  ? createHmac('sha256', config.sessionTokenPepper).update('canary').digest('hex').slice(0, 8)
+  : 'not-set';
+logger.info('server.startup', { emailPepperFingerprint, sessionPepperFingerprint, frontendOrigin: config.frontendOrigin, appBaseUrl: config.appBaseUrl });
+
 const databaseConnection = config.database ? createDatabaseConnection(config.database) : null;
 const tmdbToken = config.tmdbToken;
 const authRepository = databaseConnection ? new AuthRepository(databaseConnection.pool) : null;
@@ -105,7 +116,7 @@ if (authRepository) {
 app.use('/api', createRecommendationsRouter(tmdbService));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });
 });
 
 app.get('/health/ready', async (_req, res) => {
