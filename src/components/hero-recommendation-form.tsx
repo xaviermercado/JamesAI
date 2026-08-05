@@ -1,12 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { scoutyHeroBackground, scoutyHeroMascot } from '@/constants/brand';
+import { scoutyHeroMascot } from '@/constants/brand';
 import { BrandColors, Fonts, Radii, Spacing } from '@/constants/theme';
+import { getHeroPresentationData, type HeroPresentationData } from '@/features/hero/hero-period';
 import { FilterPanel } from '@/components/filter-panel';
 import { ThemedText } from '@/components/themed-text';
 import type { MediaType } from '@/types/recommendations';
+
+const DAY_BACKGROUND = require('../../scouty-copilot-handoff/assets/scouty-hero-background-day.png') as number;
+const NIGHT_BACKGROUND = require('../../scouty-copilot-handoff/assets/scouty-hero-background.png') as number;
+
+function backgroundForPeriod(data: HeroPresentationData): number {
+  return data.period === 'day' ? DAY_BACKGROUND : NIGHT_BACKGROUND;
+}
 
 interface HeroRecommendationFormProps {
   description: string;
@@ -26,6 +34,25 @@ interface HeroRecommendationFormProps {
 
 export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [presentation, setPresentation] = useState<HeroPresentationData>(
+    () => getHeroPresentationData(new Date()),
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        setPresentation(getHeroPresentationData(new Date()));
+      }
+    };
+
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, []);
+
   const activeFilterCount = useMemo(() => {
     return [
       props.mediaType !== 'movie',
@@ -37,14 +64,14 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
 
   return (
     <View style={styles.heroOuter}>
-      <Image source={scoutyHeroBackground} style={styles.heroBackground} contentFit="cover" accessibilityLabel="" accessible={false} />
-      <View style={styles.heroOverlay} />
+      <Image source={backgroundForPeriod(presentation)} style={styles.heroBackground} contentFit="cover" accessibilityLabel="" accessible={false} />
+      <View style={[styles.heroOverlay, { backgroundColor: presentation.overlayColor }]} />
       <View style={styles.heroInner}>
         <View style={styles.contentColumn}>
-          <ThemedText type="title" style={styles.title}>What should we watch tonight?</ThemedText>
+          <ThemedText type="title" style={styles.title}>{presentation.heading}</ThemedText>
           <ThemedText style={styles.subtitle}>Tell Scouty your mood, occasion, or oddly specific craving.</ThemedText>
           <TextInput
-            accessibilityLabel="What should we watch tonight?"
+            accessibilityLabel="What do you wanna watch?"
             multiline
             numberOfLines={4}
             value={props.description}
@@ -99,7 +126,6 @@ const styles = StyleSheet.create({
   },
   heroOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(7, 21, 47, 0.22)',
   },
   heroInner: {
     flexDirection: 'row',
