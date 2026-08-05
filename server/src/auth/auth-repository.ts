@@ -192,10 +192,12 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
   }
 
   async findEmailVerificationTokenByHash(tokenHash: string): Promise<StoredEmailVerificationToken | null> {
-    return this.selectOne<StoredEmailVerificationToken>(
-      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM email_verification_tokens WHERE token_hash = CONVERT(? USING binary) LIMIT 1',
-      [tokenHash],
+    // Send as Buffer so mysql2 uses binary comparison, bypassing any charset mismatch on the production column.
+    const [rows] = await this.executor.query(
+      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM email_verification_tokens WHERE token_hash = ? LIMIT 1',
+      [Buffer.from(tokenHash)],
     );
+    return ((rows as StoredEmailVerificationToken[])[0] ?? null) as StoredEmailVerificationToken | null;
   }
 
   async markEmailVerificationTokenUsed(tokenId: string): Promise<void> {
@@ -214,10 +216,12 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
   }
 
   async findPasswordResetTokenByHash(tokenHash: string): Promise<StoredPasswordResetToken | null> {
-    return this.selectOne<StoredPasswordResetToken>(
-      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = CONVERT(? USING binary) LIMIT 1',
-      [tokenHash],
+    // Send as Buffer so mysql2 uses binary comparison, bypassing any charset mismatch on the production column.
+    const [rows] = await this.executor.query(
+      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = ? LIMIT 1',
+      [Buffer.from(tokenHash)],
     );
+    return ((rows as StoredPasswordResetToken[])[0] ?? null) as StoredPasswordResetToken | null;
   }
 
   async markPasswordResetTokenUsed(tokenId: string): Promise<void> {
