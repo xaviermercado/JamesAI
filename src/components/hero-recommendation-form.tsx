@@ -378,8 +378,18 @@ const styles = StyleSheet.create({
   primaryHover: {
     backgroundColor: '#2b6bf1',
   },
+  primaryButtonPressed: {
+    backgroundColor: '#1a5ad4',
+    transform: [{ scale: 0.97 }],
+    opacity: 0.92,
+  },
   secondaryHover: {
     backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  filterButtonPressed: {
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    transform: [{ scale: 0.97 }],
+    opacity: 0.88,
   },
   buttonPressed: {
     opacity: 0.92,
