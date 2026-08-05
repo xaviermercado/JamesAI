@@ -282,6 +282,8 @@ export class AuthService {
       }
 
       await repository.updateUserPasswordHash(tokenState.record.user_id, passwordHash);
+      // Receiving and using the reset token proves email ownership, so activate the account.
+      await repository.updateUserEmailVerification(tokenState.record.user_id, new Date(), 'active');
       await repository.markPasswordResetTokenUsed(tokenState.record.token_id);
       await repository.invalidatePasswordResetTokensForUser(tokenState.record.user_id);
       await repository.revokeAllSessionsForUser(tokenState.record.user_id);
