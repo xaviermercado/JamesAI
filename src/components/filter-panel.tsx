@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   },
   groupHalf: {
     flex: 1,
-    minWidth: 180,
+    minWidth: 0,
     gap: Spacing.two,
   },
   input: {

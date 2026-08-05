@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
 import { scoutyHeroMascot } from '@/constants/brand';
 import { BrandColors, Fonts, Radii, Spacing } from '@/constants/theme';
@@ -33,6 +33,9 @@ interface HeroRecommendationFormProps {
 }
 
 export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
   const [showFilters, setShowFilters] = useState(false);
   const [presentation, setPresentation] = useState<HeroPresentationData>(
     () => getHeroPresentationData(new Date()),
@@ -64,30 +67,79 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
 
   return (
     <View style={styles.heroOuter}>
-      <Image source={backgroundForPeriod(presentation)} style={styles.heroBackground} contentFit="cover" accessibilityLabel="" accessible={false} />
+      <Image
+        source={backgroundForPeriod(presentation)}
+        style={styles.heroBackground}
+        contentFit="cover"
+        accessibilityLabel=""
+        accessible={false}
+      />
       <View style={[styles.heroOverlay, { backgroundColor: presentation.overlayColor }]} />
-      <View style={styles.heroInner}>
-        <View style={styles.contentColumn}>
-          <ThemedText type="title" style={styles.title}>{presentation.heading}</ThemedText>
-          <ThemedText style={styles.subtitle}>Tell Scouty your mood, occasion, or oddly specific craving.</ThemedText>
+
+      <View style={[styles.heroInner, isMobile ? styles.heroInnerMobile : styles.heroInnerDesktop]}>
+        <View style={isMobile ? styles.contentColumnMobile : styles.contentColumnDesktop}>
+          <ThemedText
+            type="title"
+            style={[styles.titleBase, isMobile ? styles.titleMobile : styles.titleDesktop]}
+          >
+            {presentation.heading}
+          </ThemedText>
+
+          <ThemedText style={isMobile ? styles.subtitleMobile : styles.subtitleDesktop}>
+            Tell Scouty your mood, occasion, or oddly specific craving.
+          </ThemedText>
+
           <TextInput
             accessibilityLabel="What do you wanna watch?"
             multiline
-            numberOfLines={4}
+            numberOfLines={isMobile ? 3 : 4}
             value={props.description}
             onChangeText={props.onDescriptionChange}
-            placeholder="I’m in the mood for something…"
+            placeholder={
+              isMobile
+                ? "Tell Scouty what you're in the mood for\u2026"
+                : "I'm in the mood for something\u2026"
+            }
             placeholderTextColor="#6d86c7"
-            style={styles.promptInput}
+            style={[styles.promptInputBase, isMobile ? styles.promptInputMobile : styles.promptInputDesktop]}
           />
-          <View style={styles.actionRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open filters" style={({ hovered, pressed }) => [styles.filterButton, hovered && styles.secondaryHover, pressed && styles.buttonPressed]} onPress={() => setShowFilters((current) => !current)}>
-              <ThemedText style={styles.filterButtonText}>{activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}</ThemedText>
+
+          <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open filters"
+              style={({ hovered, pressed }) => [
+                styles.filterButtonBase,
+                isMobile ? styles.filterButtonMobile : styles.filterButtonDesktop,
+                hovered && styles.secondaryHover,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => setShowFilters((c) => !c)}
+            >
+              <ThemedText style={isMobile ? styles.buttonTextMobile : styles.filterButtonTextDesktop}>
+                {activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}
+              </ThemedText>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Find something to watch" style={({ hovered, pressed }) => [styles.primaryButton, hovered && styles.primaryHover, pressed && styles.buttonPressed]} onPress={props.onSubmit} disabled={props.isLoading}>
-              <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Find something to watch"
+              style={({ hovered, pressed }) => [
+                styles.primaryButtonBase,
+                isMobile ? styles.primaryButtonMobile : styles.primaryButtonDesktop,
+                hovered && styles.primaryHover,
+                pressed && styles.buttonPressed,
+                props.isLoading && styles.buttonDisabled,
+              ]}
+              onPress={props.onSubmit}
+              disabled={props.isLoading}
+            >
+              <ThemedText style={isMobile ? styles.primaryButtonTextMobile : styles.primaryButtonTextDesktop}>
+                {props.isLoading ? 'Scouty is searching\u2026' : 'Find something to watch'}
+              </ThemedText>
             </Pressable>
           </View>
+
           {showFilters ? (
             <FilterPanel
               mediaType={props.mediaType}
@@ -105,8 +157,18 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
             />
           ) : null}
         </View>
-        <View pointerEvents="none" style={styles.mascotColumn}>
-          <Image source={scoutyHeroMascot} style={styles.mascot} contentFit="contain" accessibilityLabel="" accessible={false} />
+
+        <View
+          pointerEvents="none"
+          style={isMobile ? styles.mascotColumnMobile : styles.mascotColumnDesktop}
+        >
+          <Image
+            source={scoutyHeroMascot}
+            style={isMobile ? styles.mascotMobile : styles.mascotDesktop}
+            contentFit="contain"
+            accessibilityLabel=""
+            accessible={false}
+          />
         </View>
       </View>
     </View>
@@ -119,7 +181,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: Radii.hero,
     backgroundColor: BrandColors.midnight900,
-    minHeight: 520,
+    width: '100%',
   },
   heroBackground: {
     ...StyleSheet.absoluteFill,
@@ -127,92 +189,192 @@ const styles = StyleSheet.create({
   heroOverlay: {
     ...StyleSheet.absoluteFill,
   },
+
   heroInner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: Spacing.four,
-    padding: 40,
+    width: '100%',
+    minWidth: 0,
   },
-  contentColumn: {
+  heroInnerDesktop: {
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    padding: 40,
+    gap: Spacing.four,
+    minHeight: 520,
+  },
+  heroInnerMobile: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    padding: 20,
+    paddingBottom: 0,
+    gap: Spacing.three,
+  },
+
+  contentColumnDesktop: {
+    flexShrink: 1,
     flexGrow: 1,
-    flexBasis: 520,
+    flexBasis: 0,
     maxWidth: 760,
     gap: Spacing.three,
     zIndex: 1,
+    minWidth: 0,
   },
-  mascotColumn: {
-    flexBasis: 380,
-    flexGrow: 1,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    minHeight: 320,
-  },
-  mascot: {
+  contentColumnMobile: {
     width: '100%',
-    maxWidth: 420,
-    minHeight: 320,
+    minWidth: 0,
+    gap: Spacing.two,
+    zIndex: 1,
   },
-  title: {
+
+  titleBase: {
     color: BrandColors.surface,
+  },
+  titleDesktop: {
     fontSize: 72,
     lineHeight: 76,
     maxWidth: 620,
   },
-  subtitle: {
+  titleMobile: {
+    fontSize: 36,
+    lineHeight: 40,
+  },
+
+  subtitleDesktop: {
     color: BrandColors.surface,
     fontSize: 18,
     lineHeight: 30,
     maxWidth: 520,
   },
-  promptInput: {
-    minHeight: 92,
+  subtitleMobile: {
+    color: BrandColors.surface,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  promptInputBase: {
     borderRadius: Radii.large,
     backgroundColor: BrandColors.surface,
+    color: BrandColors.ink,
+    fontFamily: Fonts.sans,
+    width: '100%',
+    minWidth: 0,
+  },
+  promptInputDesktop: {
+    minHeight: 92,
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
-    color: BrandColors.ink,
     fontSize: 18,
-    fontFamily: Fonts.sans,
   },
+  promptInputMobile: {
+    minHeight: 120,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    fontSize: 16,
+  },
+
   actionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+    minWidth: 0,
   },
-  filterButton: {
-    minHeight: 56,
-    minWidth: 170,
+  actionRowMobile: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    gap: 12,
+  },
+
+  filterButtonBase: {
     borderRadius: Radii.pill,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
     justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.48)',
     backgroundColor: 'rgba(7, 21, 47, 0.16)',
+    minHeight: 52,
   },
-  filterButtonText: {
+  filterButtonDesktop: {
+    minWidth: 160,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.three,
+  },
+  filterButtonMobile: {
+    width: '100%',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 14,
+  },
+  filterButtonTextDesktop: {
     color: BrandColors.surface,
     fontFamily: Fonts.display,
     fontWeight: '700',
     fontSize: 18,
   },
-  primaryButton: {
-    minHeight: 56,
-    minWidth: 300,
+  buttonTextMobile: {
+    color: BrandColors.surface,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 17,
+    textAlign: 'center',
+  },
+
+  primaryButtonBase: {
     borderRadius: Radii.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: BrandColors.scoutyBlue,
+    minHeight: 52,
+  },
+  primaryButtonDesktop: {
+    minWidth: 280,
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
-    justifyContent: 'center',
-    backgroundColor: BrandColors.scoutyBlue,
   },
-  primaryButtonText: {
+  primaryButtonMobile: {
+    width: '100%',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 14,
+  },
+  primaryButtonTextDesktop: {
     color: BrandColors.surface,
     fontFamily: Fonts.display,
     fontWeight: '700',
     fontSize: 20,
     textAlign: 'center',
   },
+  primaryButtonTextMobile: {
+    color: BrandColors.surface,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+    fontSize: 17,
+    textAlign: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+
+  mascotColumnDesktop: {
+    flexShrink: 0,
+    width: 380,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+  },
+  mascotColumnMobile: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: Spacing.three,
+  },
+  mascotDesktop: {
+    width: 380,
+    height: 420,
+  },
+  mascotMobile: {
+    width: '68%',
+    maxWidth: 280,
+    aspectRatio: 0.8,
+  },
+
   primaryHover: {
     backgroundColor: '#2b6bf1',
   },

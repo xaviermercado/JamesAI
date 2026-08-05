@@ -13,15 +13,19 @@ interface RecommendationGridProps {
 
 export function RecommendationGrid({ recommendations, feedbackById, onAction }: RecommendationGridProps) {
   const { width } = useWindowDimensions();
-  const columns = width >= 1380 ? 4 : width >= 920 ? 2 : width >= 560 ? 2 : 1;
   const gap = 24;
-  const availableWidth = Math.max(width - 64, 320);
-  const cardWidth = columns === 1 ? availableWidth : (availableWidth - gap * (columns - 1)) / columns;
+  // Outer mainColumn has 24px padding on each side.
+  const containerPadding = 48;
+  const availableWidth = Math.max(width - containerPadding, 280);
+  const columns = availableWidth >= 1300 ? 4 : availableWidth >= 860 ? 2 : 1;
+  const cardWidth = columns === 1
+    ? availableWidth
+    : Math.floor((availableWidth - gap * (columns - 1)) / columns);
 
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
       {recommendations.map((recommendation) => (
-        <View key={recommendation.tmdbMovieId} style={{ width: cardWidth, minWidth: columns === 1 ? undefined : 250 }}>
+        <View key={recommendation.tmdbMovieId} style={{ width: cardWidth, minWidth: 0 }}>
           <RecommendationCard recommendation={recommendation} selectedAction={feedbackById[recommendation.tmdbMovieId]} onAction={onAction} />
         </View>
       ))}

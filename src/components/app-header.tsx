@@ -93,9 +93,10 @@ const styles = StyleSheet.create({
   brandText: {
     color: BrandColors.surface,
     fontFamily: Fonts.display,
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '800',
+    flexShrink: 1,
   },
   actionsRow: {
     flexDirection: 'row',
