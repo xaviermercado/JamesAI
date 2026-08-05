@@ -37,6 +37,12 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# build check folders
+dist-check/
+dist-check-final/
+scouty-dist-check/
+favicon.ico
+
 example
 
 # generated native folders
