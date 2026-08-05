@@ -193,7 +193,7 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
 
   async findEmailVerificationTokenByHash(tokenHash: string): Promise<StoredEmailVerificationToken | null> {
     return this.selectOne<StoredEmailVerificationToken>(
-      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM email_verification_tokens WHERE token_hash = ? LIMIT 1',
+      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM email_verification_tokens WHERE token_hash = CONVERT(? USING binary) LIMIT 1',
       [tokenHash],
     );
   }
@@ -215,7 +215,7 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
 
   async findPasswordResetTokenByHash(tokenHash: string): Promise<StoredPasswordResetToken | null> {
     return this.selectOne<StoredPasswordResetToken>(
-      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = ? LIMIT 1',
+      'SELECT token_id, user_id, token_hash, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = CONVERT(? USING binary) LIMIT 1',
       [tokenHash],
     );
   }

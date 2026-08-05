@@ -306,7 +306,6 @@ export class AuthService {
   private async createPasswordResetUrl(userId: string): Promise<string> {
     return this.repo.withTransaction(async (repository) => {
       const token = this.createToken(PASSWORD_RESET_TOKEN_TTL_MS);
-      logger.warn('token.reset_create', { storedHashPrefix: token.tokenHash.slice(0, 8) });
       await repository.invalidatePasswordResetTokensForUser(userId);
       await repository.createPasswordResetToken({
         token_id: randomUUID(),
@@ -321,7 +320,6 @@ export class AuthService {
 
   private async findVerificationTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredEmailVerificationToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
-    logger.warn('token.verify_lookup', { tokenLength: token.length, computedHashPrefix: tokenHash.slice(0, 8) });
     const record = await repository.findEmailVerificationTokenByHash(tokenHash);
     if (!record) {
       return { record: null, reason: 'not_found' };
@@ -340,15 +338,8 @@ export class AuthService {
 
   private async findPasswordResetTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredPasswordResetToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
-    logger.warn('token.reset_lookup', { tokenLength: token.length, computedHashPrefix: tokenHash.slice(0, 8) });
     const record = await repository.findPasswordResetTokenByHash(tokenHash);
     if (!record) {
-      // Scan the raw table to see if ANY rows exist and what their hashes look like.
-      const scanRows = await (repository as unknown as { executor: { query: (s: string, p?: unknown[]) => Promise<[unknown[], unknown]> } }).executor.query(
-        'SELECT left(token_hash, 8) as prefix, used_at, expires_at FROM password_reset_tokens ORDER BY created_at DESC LIMIT 5',
-        [],
-      );
-      logger.warn('token.reset_scan', { rows: (scanRows[0] as Array<{ prefix: string; used_at: Date | null; expires_at: Date }>).map((r) => ({ prefix: r.prefix, used: !!r.used_at, expired: r.expires_at.getTime() <= Date.now() })) });
       return { record: null, reason: 'not_found' };
     }
 
