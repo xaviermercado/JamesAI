@@ -63,7 +63,7 @@ export default function SignupScreen() {
   };
 
   return (
-    <AuthCard title="Create your JamesAI profile" description="Save your preferences and get recommendations that fit you.">
+    <AuthCard title="Create your Scouty.ca profile" description="Save your preferences and get recommendations that fit you.">
       <AuthFormField label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" autoFocus error={errors.firstName} />
       <AuthFormField label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" error={errors.lastName} />
       <AuthFormField label="Email address" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" error={errors.email} />
@@ -78,6 +78,7 @@ export default function SignupScreen() {
         <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'} asChild>
           <Pressable><ThemedText type="linkPrimary">Log in</ThemedText></Pressable>
         </Link>
+        <ThemedText themeColor="textSecondary">By continuing, you agree to our Terms and Privacy.</ThemedText>
       </AuthActionRow>
     </AuthCard>
   );

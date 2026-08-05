@@ -3,10 +3,12 @@ import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppFooter } from '@/components/app-footer';
+import { AppHeader } from '@/components/app-header';
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { getMyStreamingServices, updateMyStreamingServices } from '@/services/profile-api';
 import type { StreamingServiceCatalogItem } from '@/types/profile';
 
@@ -65,11 +67,12 @@ export default function StreamingServicesScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AppHeader />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.contentContainer}>
           <View style={styles.card}>
             <ThemedText type="subtitle">Manage streaming services</ThemedText>
-            <ThemedText themeColor="textSecondary">Choose the services you want JamesAI to prioritize in recommendations. Viewing-history synchronization is not enabled yet.</ThemedText>
+            <ThemedText themeColor="textSecondary">Choose the services you want Scouty.ca to prioritize in recommendations. Viewing-history synchronization is not enabled yet.</ThemedText>
             {loading ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
             <View style={styles.pillGrid}>
               {catalog.map((service) => {
@@ -92,6 +95,7 @@ export default function StreamingServicesScreen() {
             {saving ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
             {error ? <ThemedText>{error}</ThemedText> : null}
           </View>
+          <AppFooter />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -102,15 +106,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   contentContainer: { maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingHorizontal: Spacing.four, paddingVertical: Spacing.four },
-  card: { gap: Spacing.three, borderRadius: Spacing.three, padding: Spacing.three, backgroundColor: '#f0f0f3' },
+  card: { gap: Spacing.three, borderRadius: Radii.large, padding: Spacing.three, backgroundColor: BrandColors.surface, borderWidth: 1, borderColor: BrandColors.border },
   pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  pill: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#e8edf6' },
-  pillActive: { backgroundColor: '#3c87f7' },
+  pill: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
+  pillActive: { backgroundColor: BrandColors.scoutyBlue },
   pillText: { color: '#334155', fontWeight: '600' },
   pillTextActive: { color: '#ffffff' },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#3c87f7' },
+  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: BrandColors.scoutyBlue },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
-  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#e8edf6' },
+  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
   secondaryButtonText: { color: '#334155', fontWeight: '600' },
 });

@@ -1,9 +1,10 @@
-import { Image } from 'expo-image';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { FeedbackActions } from '@/components/feedback-actions';
+import { MoviePoster } from '@/components/movie-poster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { BrandColors, Radii, Spacing } from '@/constants/theme';
 import type { MovieRecommendation } from '@/types/recommendations';
 
 type RecommendationCardProps = {
@@ -20,7 +21,6 @@ export function RecommendationCard({
   const metadata = [
     recommendation.releaseYear ? String(recommendation.releaseYear) : 'Unknown year',
     recommendation.runtimeMinutes ? `${recommendation.runtimeMinutes} min` : 'Runtime unavailable',
-    recommendation.tmdbRating ? `${recommendation.tmdbRating.toFixed(1)}/10` : 'Rating unavailable',
   ];
 
   const providers = recommendation.providers.length ? recommendation.providers : ['No providers listed'];
@@ -28,7 +28,7 @@ export function RecommendationCard({
 
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
-      <Image source={{ uri: recommendation.posterUrl || 'https://via.placeholder.com/500x750?text=Poster' }} style={styles.poster} contentFit="cover" />
+      <MoviePoster title={recommendation.title} posterUrl={recommendation.posterUrl} rating={recommendation.tmdbRating} />
 
       <View style={styles.content}>
         <ThemedText type="smallBold" style={styles.title}>
@@ -46,14 +46,19 @@ export function RecommendationCard({
         </View>
 
         <View style={styles.chipRow}>
-          {genres.map((genre) => (
+          {genres.slice(0, 3).map((genre) => (
             <View key={genre} style={styles.genreChip}>
               <ThemedText style={styles.genreText}>{genre}</ThemedText>
             </View>
           ))}
         </View>
 
-        <ThemedText style={styles.explanation}>{recommendation.explanation}</ThemedText>
+        <ThemedText numberOfLines={4} themeColor="textSecondary" style={styles.overview}>{recommendation.explanation}</ThemedText>
+
+        <View style={styles.reasonBlock}>
+          <ThemedText type="smallBold" style={styles.reasonLabel}>Why Scouty picked it</ThemedText>
+          <ThemedText style={styles.explanation}>{recommendation.explanation}</ThemedText>
+        </View>
 
         <View style={styles.providerRow}>
           {providers.map((provider) => (
@@ -63,25 +68,7 @@ export function RecommendationCard({
           ))}
         </View>
 
-        <View style={styles.actions}>
-          <Pressable
-            style={[styles.actionButton, selectedAction === 'like' && styles.actionButtonActive]}
-            onPress={() => onAction('like', recommendation)}>
-            <ThemedText style={styles.actionText}>Like</ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.actionButton, selectedAction === 'dislike' && styles.actionButtonActive]}
-            onPress={() => onAction('dislike', recommendation)}>
-            <ThemedText style={styles.actionText}>Not for me</ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.actionButton, selectedAction === 'watched' && styles.actionButtonActive]}
-            onPress={() => onAction('watched', recommendation)}>
-            <ThemedText style={styles.actionText}>Already watched</ThemedText>
-          </Pressable>
-        </View>
+        <FeedbackActions selectedAction={selectedAction} onAction={(action) => onAction(action, recommendation)} />
       </View>
     </ThemedView>
   );
@@ -89,22 +76,21 @@ export function RecommendationCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Spacing.three,
-    overflow: 'hidden',
+    borderRadius: Radii.large,
     flexDirection: 'column',
     gap: Spacing.three,
     padding: Spacing.three,
-  },
-  poster: {
-    width: '100%',
-    height: 220,
-    borderRadius: Spacing.two,
+    borderWidth: 1,
+    borderColor: BrandColors.border,
+    boxShadow: '0 10px 30px rgba(11, 22, 51, 0.08)',
   },
   content: {
     gap: Spacing.two,
   },
   title: {
-    fontSize: 20,
+    fontSize: 28,
+    lineHeight: 32,
+    color: BrandColors.midnight900,
   },
   metaRow: {
     flexDirection: 'row',
@@ -115,7 +101,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
-    backgroundColor: 'rgba(17, 24, 39, 0.06)',
+    backgroundColor: '#eef3ff',
   },
   metaText: {
     fontSize: 13,
@@ -129,11 +115,22 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
-    backgroundColor: '#3c87f7',
+    backgroundColor: '#edf4ff',
   },
   genreText: {
     fontSize: 12,
-    color: '#ffffff',
+    color: BrandColors.midnight800,
+  },
+  overview: {
+    fontSize: 15,
+    lineHeight: 24,
+  },
+  reasonBlock: {
+    gap: Spacing.one,
+    paddingTop: Spacing.one,
+  },
+  reasonLabel: {
+    color: BrandColors.scoutyBlue,
   },
   explanation: {
     fontSize: 15,
@@ -148,29 +145,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
-    backgroundColor: 'rgba(60, 135, 247, 0.12)',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: BrandColors.border,
   },
   providerText: {
     fontSize: 12,
-    color: '#3c87f7',
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginTop: Spacing.one,
-  },
-  actionButton: {
-    borderRadius: 999,
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    backgroundColor: 'rgba(60, 135, 247, 0.12)',
-  },
-  actionButtonActive: {
-    backgroundColor: '#3c87f7',
-  },
-  actionText: {
-    fontSize: 13,
-    color: '#3c87f7',
+    color: BrandColors.midnight800,
   },
 });

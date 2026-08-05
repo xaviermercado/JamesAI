@@ -55,7 +55,7 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <AuthCard title="Choose a new password" description="Create a new password for your JamesAI account.">
+    <AuthCard title="Choose a new password" description="Create a new password for your Scouty.ca account.">
       {!token ? <ThemedText>This reset link is invalid or incomplete. Request a new one to continue.</ThemedText> : null}
       {status !== 'success' ? (
         <View style={{ gap: 16 }}>

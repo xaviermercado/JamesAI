@@ -3,11 +3,13 @@ import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppFooter } from '@/components/app-footer';
+import { AppHeader } from '@/components/app-header';
 import { AuthFormField } from '@/components/auth/auth-form-field';
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { editProfileSchema } from '@/features/profile/validation';
 import { getMyProfile, updateMyProfile } from '@/services/profile-api';
 
@@ -113,11 +115,12 @@ export default function EditProfileScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AppHeader />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             <ThemedText type="subtitle">Edit profile</ThemedText>
-            <ThemedText themeColor="textSecondary">Update how JamesAI presents your profile and region-based preferences.</ThemedText>
+            <ThemedText themeColor="textSecondary">Update how Scouty.ca presents your profile and region-based preferences.</ThemedText>
             {loading ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
             <AuthFormField label="First name" value={form.firstName} onChangeText={(value) => updateField('firstName', value)} error={errors.firstName} autoFocus />
             <AuthFormField label="Last name" value={form.lastName} onChangeText={(value) => updateField('lastName', value)} error={errors.lastName} />
@@ -140,6 +143,7 @@ export default function EditProfileScreen() {
             {saving ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
             {formError ? <ThemedText>{formError}</ThemedText> : null}
           </View>
+          <AppFooter />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -150,10 +154,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   contentContainer: { maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingHorizontal: Spacing.four, paddingVertical: Spacing.four },
-  card: { gap: Spacing.two, borderRadius: Spacing.three, padding: Spacing.three, backgroundColor: '#f0f0f3' },
+  card: { gap: Spacing.two, borderRadius: Radii.large, padding: Spacing.three, backgroundColor: BrandColors.surface, borderWidth: 1, borderColor: BrandColors.border },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#3c87f7' },
+  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: BrandColors.scoutyBlue },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
-  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#e8edf6' },
+  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
   secondaryButtonText: { color: '#334155', fontWeight: '600' },
 });

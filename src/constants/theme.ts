@@ -9,18 +9,18 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#172033',
+    background: '#F5F7FF',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#E8F0FF',
+    textSecondary: '#667085',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#172033',
+    background: '#F5F7FF',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#E8F0FF',
+    textSecondary: '#667085',
   },
 } as const;
 
@@ -28,8 +28,8 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
+    display: 'system-ui',
     /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
     /** iOS `UIFontDescriptorSystemDesignRounded` */
@@ -39,12 +39,14 @@ export const Fonts = Platform.select({
   },
   default: {
     sans: 'normal',
+    display: 'normal',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
   },
   web: {
-    sans: 'var(--font-display)',
+    sans: 'var(--font-body)',
+    display: 'var(--font-display)',
     serif: 'var(--font-serif)',
     rounded: 'var(--font-rounded)',
     mono: 'var(--font-mono)',
@@ -61,5 +63,27 @@ export const Spacing = {
   six: 64,
 } as const;
 
+export const BrandColors = {
+  midnight950: '#07152F',
+  midnight900: '#0B1633',
+  midnight800: '#123A78',
+  scoutyBlue: '#3478F6',
+  scoutyCyan: '#45C8F5',
+  scoutyCoral: '#FF5D5D',
+  canvas: '#F5F7FF',
+  surface: '#FFFFFF',
+  ink: '#172033',
+  muted: '#667085',
+  border: 'rgba(23, 32, 51, 0.10)',
+} as const;
+
+export const Radii = {
+  small: 10,
+  medium: 16,
+  large: 22,
+  hero: 30,
+  pill: 999,
+} as const;
+
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export const MaxContentWidth = 1480;

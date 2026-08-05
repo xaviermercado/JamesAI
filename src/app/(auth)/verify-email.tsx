@@ -61,7 +61,7 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <AuthCard title="Verify your email" description="Finish setting up your JamesAI account by confirming your email address.">
+    <AuthCard title="Verify your email" description="Finish setting up your Scouty.ca account by confirming your email address.">
       <View style={{ gap: 16 }}>
         {status === 'verifying' || busy ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
         {message ? <ThemedText themeColor={status === 'success' ? 'textSecondary' : undefined}>{message}</ThemedText> : null}

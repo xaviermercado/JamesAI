@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppFooter } from '@/components/app-footer';
+import { AppHeader } from '@/components/app-header';
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { logoutAllAuthDevices, logoutAuthAccount } from '@/services/auth-api';
 import { getMyProfile, getMyStreamingServices } from '@/services/profile-api';
 import type { UserProfile, UserStreamingService } from '@/types/profile';
@@ -75,6 +77,7 @@ export default function ProfileSummaryScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <AppHeader />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.heroCard}>
@@ -130,6 +133,7 @@ export default function ProfileSummaryScreen() {
               </Pressable>
             </View>
           </ThemedView>
+          <AppFooter />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -148,11 +152,11 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   heroCard: { gap: Spacing.two },
-  sectionCard: { borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.two },
+  sectionCard: { borderRadius: Radii.large, padding: Spacing.three, gap: Spacing.two, borderWidth: 1, borderColor: BrandColors.border },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#3c87f7' },
+  primaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: BrandColors.scoutyBlue },
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
-  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#e8edf6' },
+  secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
   secondaryButtonText: { color: '#334155', fontWeight: '600' },
   avatar: { width: 88, height: 88, borderRadius: 44 },
 });

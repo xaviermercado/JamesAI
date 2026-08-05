@@ -77,13 +77,13 @@ export function createEmailService(config: AppConfig): EmailService {
       try {
         await transport.send({
           to: payload.to,
-          subject: 'Verify your JamesAI account',
+          subject: 'Verify your Scouty.ca account',
           text: [
-            'Your JamesAI account is ready to verify.',
+            'Your Scouty.ca account is ready to verify.',
             `Open this link to verify it: ${payload.verificationUrl}`,
             'If you did not create this account, you can ignore this email.',
           ].join('\n\n'),
-          html: `<p>Your JamesAI account is ready to verify.</p><p><a href="${payload.verificationUrl}">Verify your email address</a></p><p>If you did not create this account, you can ignore this email.</p>`,
+          html: `<p>Your Scouty.ca account is ready to verify.</p><p><a href="${payload.verificationUrl}">Verify your email address</a></p><p>If you did not create this account, you can ignore this email.</p>`,
         });
       } catch (error) {
         throw new EmailDeliveryError(error instanceof Error ? error.message : undefined);
@@ -94,13 +94,13 @@ export function createEmailService(config: AppConfig): EmailService {
       try {
         await transport.send({
           to: payload.to,
-          subject: 'Reset your JamesAI password',
+          subject: 'Reset your Scouty.ca password',
           text: [
-            'We received a password reset request for your JamesAI account.',
+            'We received a password reset request for your Scouty.ca account.',
             `Use this link to reset your password: ${payload.resetUrl}`,
             'If you did not request a reset, you can ignore this email.',
           ].join('\n\n'),
-          html: `<p>We received a password reset request for your JamesAI account.</p><p><a href="${payload.resetUrl}">Reset your password</a></p><p>If you did not request a reset, you can ignore this email.</p>`,
+          html: `<p>We received a password reset request for your Scouty.ca account.</p><p><a href="${payload.resetUrl}">Reset your password</a></p><p>If you did not request a reset, you can ignore this email.</p>`,
         });
       } catch (error) {
         throw new EmailDeliveryError(error instanceof Error ? error.message : undefined);

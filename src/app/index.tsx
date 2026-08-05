@@ -1,31 +1,23 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'expo-router';
-import {
-  ActivityIndicator,
-  Animated,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAuthSession } from '@/components/auth-session-provider';
-import { RecommendationCard } from '@/components/recommendation-card';
+import { AppFooter } from '@/components/app-footer';
+import { AppHeader } from '@/components/app-header';
+import { HeroRecommendationForm } from '@/components/hero-recommendation-form';
+import { RecommendationGrid } from '@/components/recommendation-grid';
+import { ScoutyStateMessage } from '@/components/scouty-state-message';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { getHealthStatus } from '@/services/health-api';
+import { ENGINE_CREDIT } from '@/constants/brand';
+import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { getRecommendations } from '@/services/recommendations-api';
 import type { MediaType, MovieRecommendation, RecommendationRequest } from '@/types/recommendations';
 
 type FeedbackAction = 'like' | 'dislike' | 'watched';
 
 export default function HomeScreen() {
-  const { status } = useAuthSession();
-  const [description, setDescription] = useState('Something funny but not stupid, under two hours, preferably from the 90s, for a date night.');
+  const [description, setDescription] = useState('');
   const [mediaType, setMediaType] = useState<MediaType>('movie');
   const [maxRuntime, setMaxRuntime] = useState('');
   const [country, setCountry] = useState('');
@@ -34,34 +26,11 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [feedbackById, setFeedbackById] = useState<Record<number, FeedbackAction>>({});
-  const [page, setPage] = useState(0);
-  const [healthStatus, setHealthStatus] = useState<'ok' | 'error'>('error');
-  const [advancedHeight] = useState(() => new Animated.Value(0));
 
-  useEffect(() => {
-    const loadHealthStatus = async () => {
-      const status = await getHealthStatus();
-      setHealthStatus(status.status);
-    };
-
-    loadHealthStatus();
-    const interval = setInterval(loadHealthStatus, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    Animated.timing(advancedHeight, {
-      toValue: showAdvancedFilters ? 1 : 0,
-      duration: 220,
-      useNativeDriver: false,
-    }).start();
-  }, [advancedHeight, showAdvancedFilters]);
-
-  const submitRequest = async (nextPage = 0) => {
+  const submitRequest = async () => {
     if (!description.trim()) {
-      setError('Please describe what you want to watch.');
+      setError('Tell Scouty a little about what you want to watch first.');
       setHasSearched(true);
       return;
     }
@@ -85,9 +54,8 @@ export default function HomeScreen() {
     try {
       const result = await getRecommendations(request);
       setRecommendations(result.recommendations);
-      setPage(nextPage);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unable to load recommendations.');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Scouty hit a snag while searching. Please try again.');
       setRecommendations([]);
     } finally {
       setIsLoading(false);
@@ -98,182 +66,91 @@ export default function HomeScreen() {
     setFeedbackById((current) => ({ ...current, [recommendation.tmdbMovieId]: action }));
   };
 
+  const clearFilters = () => {
+    setMediaType('movie');
+    setMaxRuntime('');
+    setCountry('');
+    setStreamingServices('');
+  };
+
   return (
     <ThemedView style={styles.container}>
+      <AppHeader />
+
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          <ThemedView style={styles.heroCard}>
-            <ThemedText type="title" style={styles.title}>
-              JamesAI
-            </ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-              Describe the mood, vibe, or occasion and we will surface five movies that feel right.
-            </ThemedText>
+          <View style={styles.mainColumn}>
+            <HeroRecommendationForm
+              description={description}
+              mediaType={mediaType}
+              maxRuntime={maxRuntime}
+              country={country}
+              streamingServices={streamingServices}
+              onDescriptionChange={setDescription}
+              onMediaTypeChange={setMediaType}
+              onMaxRuntimeChange={setMaxRuntime}
+              onCountryChange={setCountry}
+              onStreamingServicesChange={setStreamingServices}
+              onClearFilters={clearFilters}
+              onSubmit={() => void submitRequest()}
+              isLoading={isLoading}
+            />
 
-            <View style={styles.accountActions}>
-              {status === 'authenticated' ? (
-                <Link href={'/profile' as never} asChild>
-                  <Pressable style={styles.accountButtonPrimary}>
-                    <ThemedText style={styles.accountButtonPrimaryText}>View profile</ThemedText>
-                  </Pressable>
-                </Link>
-              ) : (
-                <>
-                  <Link href="/login" asChild>
-                    <Pressable style={styles.accountButton}>
-                      <ThemedText style={styles.accountButtonText}>Log in</ThemedText>
-                    </Pressable>
-                  </Link>
-                  <Link href="/signup" asChild>
-                    <Pressable style={styles.accountButtonPrimary}>
-                      <ThemedText style={styles.accountButtonPrimaryText}>Create account</ThemedText>
-                    </Pressable>
-                  </Link>
-                </>
-              )}
-            </View>
+            {!hasSearched ? (
+              <ScoutyStateMessage title="Scouty is ready when you are." body="Share your mood or occasion and Scouty will start scouting for tonight’s movie." />
+            ) : null}
 
-            <ThemedView
-              type="backgroundElement"
-              style={[styles.statusBanner, healthStatus === 'ok' ? styles.statusBannerOk : styles.statusBannerError]}>
-              <ThemedText style={styles.statusText}>
-                {healthStatus === 'ok' ? 'Backend online' : 'Backend unavailable'}
-              </ThemedText>
-            </ThemedView>
+            {error ? (
+              <View style={styles.stateStack}>
+                <ScoutyStateMessage title="Scouty hit a snag." body="We couldn't finish your search this time. Check your prompt or try again in a moment." tone="error" />
+                <Pressable accessibilityRole="button" accessibilityLabel="Retry recommendation search" style={styles.retryButton} onPress={() => void submitRequest()}>
+                  <ThemedText style={styles.retryText}>Retry</ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
 
-            <ThemedView type="backgroundElement" style={styles.formCard}>
-              <ThemedText type="smallBold">What are you in the mood for?</ThemedText>
-              <TextInput
-                multiline
-                numberOfLines={4}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Try: Something funny but not stupid, under two hours, for a date night."
-                placeholderTextColor="#8a8f98"
-                style={styles.textInput}
-              />
+            {isLoading && recommendations.length === 0 ? (
+              <View style={styles.loadingCard}>
+                <ActivityIndicator size="large" color={BrandColors.scoutyBlue} />
+                <ThemedText type="smallBold">Scouty is searching…</ThemedText>
+                <ThemedText themeColor="textSecondary">Pulling together the closest matches for your mood.</ThemedText>
+              </View>
+            ) : null}
 
-              <Pressable
-                style={styles.advancedToggle}
-                onPress={() => setShowAdvancedFilters((current) => !current)}>
-                <ThemedText type="smallBold">Advanced search</ThemedText>
-                <ThemedText style={styles.advancedToggleText}>{showAdvancedFilters ? '−' : '+'}</ThemedText>
-              </Pressable>
+            {hasSearched && !isLoading && !error && recommendations.length === 0 ? (
+              <ScoutyStateMessage title="No close matches yet." body="Try broadening the mood, removing a filter, or giving Scouty a different angle." />
+            ) : null}
 
-              <Animated.View
-                style={{
-                  overflow: 'hidden',
-                  maxHeight: advancedHeight.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 260],
-                  }),
-                  opacity: advancedHeight.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 1],
-                  }),
-                }}>
-                <View style={styles.filterGrid}>
-                  <View style={styles.filterGroup}>
-                    <ThemedText type="smallBold">Media</ThemedText>
-                    <View style={styles.pillRow}>
-                      <Pressable
-                        style={[styles.pill, mediaType === 'movie' && styles.pillActive]}
-                        onPress={() => setMediaType('movie')}>
-                        <ThemedText style={[styles.pillText, mediaType === 'movie' && styles.pillTextActive]}>
-                          Movies
-                        </ThemedText>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.pill, mediaType === 'tv' && styles.pillActive]}
-                        onPress={() => setMediaType('tv')}>
-                        <ThemedText style={[styles.pillText, mediaType === 'tv' && styles.pillTextActive]}>
-                          TV
-                        </ThemedText>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <View style={styles.filterGroup}>
-                    <ThemedText type="smallBold">Max runtime (min)</ThemedText>
-                    <TextInput
-                      value={maxRuntime}
-                      onChangeText={setMaxRuntime}
-                      placeholder="120"
-                      keyboardType="numeric"
-                      style={styles.input}
-                    />
-                  </View>
-
-                  <View style={styles.filterGroup}>
-                    <ThemedText type="smallBold">Country</ThemedText>
-                    <TextInput
-                      value={country}
-                      onChangeText={setCountry}
-                      placeholder="United States"
-                      style={styles.input}
-                    />
-                  </View>
-
-                  <View style={styles.filterGroup}>
-                    <ThemedText type="smallBold">Streaming services</ThemedText>
-                    <TextInput
-                      value={streamingServices}
-                      onChangeText={setStreamingServices}
-                      placeholder="Netflix, Max"
-                      style={styles.input}
-                    />
-                  </View>
+            {recommendations.length > 0 ? (
+              <View style={styles.resultsSection}>
+                <View style={styles.resultsHeader}>
+                  <ThemedText type="subtitle">Scouty found these for you</ThemedText>
+                  {isLoading ? <ThemedText themeColor="textSecondary">Refreshing your picks…</ThemedText> : null}
                 </View>
-              </Animated.View>
+                <RecommendationGrid recommendations={recommendations} feedbackById={feedbackById} onAction={handleAction} />
+              </View>
+            ) : null}
 
-              <Pressable style={styles.primaryButton} onPress={() => submitRequest(0)}>
-                <ThemedText style={styles.primaryButtonText}>Find something to watch</ThemedText>
-              </Pressable>
-            </ThemedView>
-          </ThemedView>
-
-          {isLoading ? (
-            <ThemedView type="backgroundElement" style={styles.stateCard}>
-              <ActivityIndicator size="large" color="#3c87f7" />
-              <ThemedText style={styles.stateText}>Finding the perfect fit…</ThemedText>
-            </ThemedView>
-          ) : null}
-
-          {!isLoading && error ? (
-            <ThemedView type="backgroundElement" style={styles.stateCard}>
-              <ThemedText style={styles.stateText}>{error}</ThemedText>
-              <ThemedText themeColor="textSecondary" style={styles.stateHint}>
-                The backend may be unavailable or still needs a TMDB token.
-              </ThemedText>
-              <Pressable style={styles.secondaryButton} onPress={() => submitRequest(0)}>
-                <ThemedText style={styles.secondaryButtonText}>Try again</ThemedText>
-              </Pressable>
-            </ThemedView>
-          ) : null}
-
-          {!isLoading && hasSearched && !error && recommendations.length === 0 ? (
-            <ThemedView type="backgroundElement" style={styles.stateCard}>
-              <ThemedText style={styles.stateText}>No matches yet. Try broadening the prompt.</ThemedText>
-            </ThemedView>
-          ) : null}
-
-          {!isLoading && recommendations.length > 0 ? (
-            <View style={styles.resultsSection}>
-              <ThemedText type="subtitle">Recommended for you</ThemedText>
-              {recommendations.map((recommendation) => (
-                <RecommendationCard
-                  key={recommendation.tmdbMovieId}
-                  recommendation={recommendation}
-                  selectedAction={feedbackById[recommendation.tmdbMovieId]}
-                  onAction={handleAction}
-                />
-              ))}
-
-              <Pressable style={styles.secondaryButton} onPress={() => submitRequest(page + 1)}>
-                <ThemedText style={styles.secondaryButtonText}>Give me five more</ThemedText>
-              </Pressable>
+            <View style={styles.howSection}>
+              <ThemedText type="subtitle">How Scouty picks</ThemedText>
+              <View style={styles.howGrid}>
+                <ThemedView type="backgroundElement" style={styles.howCard}>
+                  <ThemedText type="smallBold">Mood first</ThemedText>
+                  <ThemedText themeColor="textSecondary">Scouty reads your prompt in plain language and uses the current filter settings you choose.</ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={styles.howCard}>
+                  <ThemedText type="smallBold">Real catalogue data</ThemedText>
+                  <ThemedText themeColor="textSecondary">Recommendations use live TMDB content details and provider information when available.</ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={styles.howCard}>
+                  <ThemedText type="smallBold">Powered by JamesAI</ThemedText>
+                  <ThemedText themeColor="textSecondary">{ENGINE_CREDIT}</ThemedText>
+                </ThemedView>
+              </View>
             </View>
-          ) : null}
+          </View>
+
+          <AppFooter />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -286,175 +163,63 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingBottom: Spacing.five,
   },
   contentContainer: {
-    maxWidth: MaxContentWidth,
+    paddingBottom: Spacing.five,
+  },
+  mainColumn: {
     width: '100%',
+    maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.four,
+    paddingTop: Spacing.three,
     gap: Spacing.four,
   },
-  heroCard: {
-    gap: Spacing.three,
-  },
-  title: {
-    textAlign: Platform.select({ web: 'center' }) ?? 'left',
-  },
-  subtitle: {
-    fontSize: 18,
-    lineHeight: 28,
-    textAlign: Platform.select({ web: 'center' }) ?? 'left',
-  },
-  accountActions: {
-    alignSelf: Platform.select({ web: 'center' }) ?? 'flex-start',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  stateStack: {
     gap: Spacing.two,
   },
-  accountButton: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    backgroundColor: '#e8edf6',
-  },
-  accountButtonText: {
-    color: '#334155',
-    fontWeight: '700',
-  },
-  accountButtonPrimary: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    backgroundColor: '#3c87f7',
-  },
-  accountButtonPrimaryText: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  statusBanner: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+  retryButton: {
     alignSelf: 'flex-start',
+    minHeight: 44,
+    borderRadius: Radii.pill,
+    backgroundColor: BrandColors.scoutyBlue,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 12,
   },
-  statusBannerOk: {
-    backgroundColor: 'rgba(34, 197, 94, 0.16)',
-  },
-  statusBannerError: {
-    backgroundColor: 'rgba(248, 113, 113, 0.16)',
-  },
-  statusText: {
-    fontSize: 13,
+  retryText: {
+    color: BrandColors.surface,
     fontWeight: '700',
   },
-  formCard: {
-    borderRadius: Spacing.three,
+  loadingCard: {
+    borderRadius: Radii.large,
     padding: Spacing.four,
-    gap: Spacing.three,
-  },
-  textInput: {
+    backgroundColor: BrandColors.surface,
     borderWidth: 1,
-    borderColor: '#d7dce3',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
-    minHeight: 110,
-    textAlignVertical: 'top',
-    fontSize: 16,
-    backgroundColor: '#ffffff',
-  },
-  advancedToggle: {
-    flexDirection: 'row',
+    borderColor: BrandColors.border,
+    gap: Spacing.two,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#d7dce3',
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    backgroundColor: '#f8fafc',
-  },
-  advancedToggleText: {
-    marginLeft: Spacing.two,
-    fontWeight: '700',
-    color: '#3c87f7',
-  },
-  filterGrid: {
-    gap: Spacing.three,
-  },
-  filterGroup: {
-    gap: Spacing.two,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-  },
-  pill: {
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
-    backgroundColor: '#eef2f7',
-  },
-  pillActive: {
-    backgroundColor: '#3c87f7',
-  },
-  pillText: {
-    fontSize: 14,
-    color: '#475467',
-  },
-  pillTextActive: {
-    color: '#ffffff',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d7dce3',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    fontSize: 16,
-    backgroundColor: '#ffffff',
-  },
-  primaryButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    backgroundColor: '#3c87f7',
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  stateCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  stateText: {
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  stateHint: {
-    textAlign: 'center',
-    fontSize: 14,
   },
   resultsSection: {
     gap: Spacing.three,
   },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    backgroundColor: '#111827',
+  resultsHeader: {
+    gap: Spacing.one,
   },
-  secondaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
+  howSection: {
+    gap: Spacing.three,
+  },
+  howGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+  },
+  howCard: {
+    flexBasis: 280,
+    flexGrow: 1,
+    borderRadius: Radii.large,
+    padding: Spacing.three,
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderColor: BrandColors.border,
   },
 });
