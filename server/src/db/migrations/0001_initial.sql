@@ -32,7 +32,7 @@ CREATE TABLE user_sessions (
 CREATE TABLE email_verification_tokens (
   token_id CHAR(36) NOT NULL,
   user_id CHAR(36) NOT NULL,
-  token_hash CHAR(64) NOT NULL,
+  token_hash VARCHAR(64) NOT NULL,
   expires_at DATETIME(3) NOT NULL,
   used_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -46,7 +46,7 @@ CREATE TABLE email_verification_tokens (
 CREATE TABLE password_reset_tokens (
   token_id CHAR(36) NOT NULL,
   user_id CHAR(36) NOT NULL,
-  token_hash CHAR(64) NOT NULL,
+  token_hash VARCHAR(64) NOT NULL,
   expires_at DATETIME(3) NOT NULL,
   used_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
