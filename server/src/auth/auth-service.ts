@@ -14,6 +14,7 @@ import type {
 } from './auth-repository';
 import { toSafeUser } from './auth-repository';
 import type { AuthIdentity, AuthSessionResponse, SafeUser } from './auth-types';
+import { logger } from '../utils/logger';
 
 export interface RegisterInput {
   firstName?: string;
@@ -305,6 +306,7 @@ export class AuthService {
   private async createPasswordResetUrl(userId: string): Promise<string> {
     return this.repo.withTransaction(async (repository) => {
       const token = this.createToken(PASSWORD_RESET_TOKEN_TTL_MS);
+      logger.warn('token.reset_create', { storedHashPrefix: token.tokenHash.slice(0, 8) });
       await repository.invalidatePasswordResetTokensForUser(userId);
       await repository.createPasswordResetToken({
         token_id: randomUUID(),
@@ -319,6 +321,7 @@ export class AuthService {
 
   private async findVerificationTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredEmailVerificationToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
+    logger.warn('token.verify_lookup', { tokenLength: token.length, computedHashPrefix: tokenHash.slice(0, 8) });
     const record = await repository.findEmailVerificationTokenByHash(tokenHash);
     if (!record) {
       return { record: null, reason: 'not_found' };
@@ -337,6 +340,7 @@ export class AuthService {
 
   private async findPasswordResetTokenState(repository: AuthRepositoryLike, token: string): Promise<{ record: StoredPasswordResetToken | null; reason: TokenInvalidReason }> {
     const tokenHash = hashSessionToken(token, this.emailTokenPepper);
+    logger.warn('token.reset_lookup', { tokenLength: token.length, computedHashPrefix: tokenHash.slice(0, 8) });
     const record = await repository.findPasswordResetTokenByHash(tokenHash);
     if (!record) {
       return { record: null, reason: 'not_found' };
