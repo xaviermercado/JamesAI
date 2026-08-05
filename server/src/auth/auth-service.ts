@@ -343,6 +343,12 @@ export class AuthService {
     logger.warn('token.reset_lookup', { tokenLength: token.length, computedHashPrefix: tokenHash.slice(0, 8) });
     const record = await repository.findPasswordResetTokenByHash(tokenHash);
     if (!record) {
+      // Scan the raw table to see if ANY rows exist and what their hashes look like.
+      const scanRows = await (repository as unknown as { executor: { query: (s: string, p?: unknown[]) => Promise<[unknown[], unknown]> } }).executor.query(
+        'SELECT left(token_hash, 8) as prefix, used_at, expires_at FROM password_reset_tokens ORDER BY created_at DESC LIMIT 5',
+        [],
+      );
+      logger.warn('token.reset_scan', { rows: (scanRows[0] as Array<{ prefix: string; used_at: Date | null; expires_at: Date }>).map((r) => ({ prefix: r.prefix, used: !!r.used_at, expired: r.expires_at.getTime() <= Date.now() })) });
       return { record: null, reason: 'not_found' };
     }
 
