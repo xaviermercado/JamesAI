@@ -13,10 +13,17 @@ export function resolveSameSite(config: AppConfig): CookieOptions['sameSite'] {
   return config.nodeEnv === 'production' ? 'none' : 'lax';
 }
 
+function resolveSecure(config: AppConfig): boolean {
+  // SameSite=None is only valid on Secure cookies — enforce this automatically.
+  const sameSite = resolveSameSite(config);
+  if (sameSite === 'none') return true;
+  return config.nodeEnv === 'production';
+}
+
 export function getSessionCookieOptions(config: AppConfig): CookieOptions {
   return {
     httpOnly: true,
-    secure: config.nodeEnv === 'production',
+    secure: resolveSecure(config),
     sameSite: resolveSameSite(config),
     domain: config.authCookieDomain,
     path: '/',

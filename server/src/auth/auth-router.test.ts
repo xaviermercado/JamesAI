@@ -194,7 +194,7 @@ function createConfig(): AppConfig {
     openAiTimeoutMs: 8000,
     frontendOrigin: 'https://app.example.com',
     appBaseUrl: 'https://app.example.com',
-    authCookieSameSite: 'none',
+    authCookieSameSite: 'lax',
     emailProvider: 'console',
     emailTokenPepper: 'y'.repeat(32),
     database: null,
