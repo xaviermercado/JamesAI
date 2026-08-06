@@ -5,9 +5,10 @@ import type { AppConfig } from '../config/env';
 import { AuthService } from '../auth/auth-service';
 import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
-import { streamingServiceCatalog, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
+import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
 import type { ProfileRepositoryLike } from './profile-repository';
-import { toApiProfile } from './profile-repository';
+import { resolveServiceSelections, toApiProfile } from './profile-repository';
+import { countryCatalog, languageCatalog } from './reference-data';
 import { logger } from '../utils/logger';
 
 function buildDisplayName(firstName: string, lastName: string, displayName: string | null | undefined): string {
@@ -88,6 +89,11 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
     next();
   });
 
+  // Public reference data: countries and language catalogs (no auth required).
+  router.get('/reference', (_req, res) => {
+    return res.json({ countries: countryCatalog, languages: languageCatalog, providers: streamingServiceCatalog });
+  });
+
   router.get('/', async (req, res) => {
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
@@ -134,6 +140,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         lastName: parsed.data.lastName,
         displayName: buildDisplayName(parsed.data.firstName, parsed.data.lastName, parsed.data.displayName),
         countryCode: parsed.data.countryCode,
+        viewingFormatPreference: parsed.data.viewingFormatPreference ?? null,
         avatarUrl: parsed.data.avatarUrl ?? null,
         letterboxdUsername: parsed.data.letterboxdUsername ?? null,
         letterboxdProfileUrl: parsed.data.letterboxdProfileUrl ?? null,
@@ -148,6 +155,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
     }
   });
 
+  // Streaming services (legacy individual endpoint, preserved for backward compatibility).
   router.get('/streaming-services', async (req, res) => {
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
@@ -161,10 +169,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       }
 
       const services = await profileRepository.listStreamingServices(restored.identity.userId);
-      return res.json({
-        services,
-        catalog: streamingServiceCatalog,
-      });
+      return res.json({ services, catalog: streamingServiceCatalog });
     } catch (error) {
       logProfileRouteError('/streaming-services', req, error);
       return res.status(500).json({ error: 'Unable to load streaming services right now' });
@@ -193,9 +198,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       }
 
       const profile = await profileRepository.findByUserId(restored.identity.userId);
-      const serviceSelections = parsed.data.providerIds
-        .map((providerId) => streamingServiceCatalog.find((item) => item.providerId === providerId))
-        .filter((item): item is (typeof streamingServiceCatalog)[number] => Boolean(item));
+      const serviceSelections = resolveServiceSelections(parsed.data.providerIds);
 
       const services = await profileRepository.replaceStreamingServices(
         restored.identity.userId,
@@ -207,6 +210,142 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
     } catch (error) {
       logProfileRouteError('/streaming-services', req, error);
       return res.status(500).json({ error: 'Unable to save streaming services right now' });
+    }
+  });
+
+  // Content languages.
+  router.get('/content-languages', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const languages = await profileRepository.listContentLanguages(restored.identity.userId);
+      return res.json({ languages });
+    } catch (error) {
+      logProfileRouteError('/content-languages', req, error);
+      return res.status(500).json({ error: 'Unable to load content language preferences right now' });
+    }
+  });
+
+  router.patch('/content-languages', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      if (!requireCsrf(req, res, restored.identity.sessionTokenHash, config)) {
+        return undefined;
+      }
+
+      const parsed = updateContentLanguagesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      }
+
+      const languages = await profileRepository.replaceContentLanguages(restored.identity.userId, parsed.data.languageCodes);
+      return res.json({ languages });
+    } catch (error) {
+      logProfileRouteError('/content-languages', req, error);
+      return res.status(500).json({ error: 'Unable to save content language preferences right now' });
+    }
+  });
+
+  // Atomic preferences: market + streaming services + content languages + viewing format.
+  router.get('/preferences', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { userId } = restored.identity;
+      const [profile, services, languages] = await Promise.all([
+        profileRepository.findByUserId(userId),
+        profileRepository.listStreamingServices(userId),
+        profileRepository.listContentLanguages(userId),
+      ]);
+
+      return res.json({
+        marketCode: profile?.country_code ?? null,
+        viewingFormatPreference: profile?.viewing_format_preference ?? null,
+        streamingServices: services,
+        contentLanguages: languages,
+        catalog: {
+          providers: streamingServiceCatalog,
+          countries: countryCatalog,
+          languages: languageCatalog,
+        },
+      });
+    } catch (error) {
+      logProfileRouteError('/preferences', req, error);
+      return res.status(500).json({ error: 'Unable to load preferences right now' });
+    }
+  });
+
+  router.patch('/preferences', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      if (!requireCsrf(req, res, restored.identity.sessionTokenHash, config)) {
+        return undefined;
+      }
+
+      const parsed = updatePreferencesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      }
+
+      const { userId } = restored.identity;
+      const serviceSelections = resolveServiceSelections(parsed.data.providerIds);
+
+      await profileRepository.replacePreferences(userId, {
+        marketCode: parsed.data.marketCode,
+        viewingFormatPreference: parsed.data.viewingFormatPreference,
+        services: serviceSelections,
+        languageCodes: parsed.data.languageCodes,
+      });
+
+      const [profile, services, languages] = await Promise.all([
+        profileRepository.findByUserId(userId),
+        profileRepository.listStreamingServices(userId),
+        profileRepository.listContentLanguages(userId),
+      ]);
+
+      return res.json({
+        marketCode: profile?.country_code ?? parsed.data.marketCode,
+        viewingFormatPreference: profile?.viewing_format_preference ?? null,
+        streamingServices: services,
+        contentLanguages: languages,
+      });
+    } catch (error) {
+      logProfileRouteError('/preferences', req, error);
+      return res.status(500).json({ error: 'Unable to save preferences right now' });
     }
   });
 

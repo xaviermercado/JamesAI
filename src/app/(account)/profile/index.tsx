@@ -10,14 +10,22 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { logoutAllAuthDevices, logoutAuthAccount } from '@/services/auth-api';
-import { getMyProfile, getMyStreamingServices } from '@/services/profile-api';
-import type { UserProfile, UserStreamingService } from '@/types/profile';
+import { getMyPreferences, getMyProfile } from '@/services/profile-api';
+import type { ContentLanguageSelection, UserPreferences, UserProfile } from '@/types/profile';
+
+const VIEWING_FORMAT_LABELS: Record<string, string> = {
+  no_preference: 'No preference',
+  subtitles_ok: 'Subtitles are fine',
+  prefer_dubbed: 'Prefer dubbed versions',
+};
 
 export default function ProfileSummaryScreen() {
   const router = useRouter();
   const { csrfToken, clearSession, user } = useAuthSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [services, setServices] = useState<UserStreamingService[]>([]);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [countryNames, setCountryNames] = useState<Record<string, string>>({});
+  const [languageNames, setLanguageNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,35 +36,30 @@ export default function ProfileSummaryScreen() {
       setLoading(true);
       setError(null);
       try {
-        const [profileResponse, servicesResponse] = await Promise.all([getMyProfile(), getMyStreamingServices()]);
-        if (!active) {
-          return;
-        }
+        const [profileResponse, prefsResponse] = await Promise.all([getMyProfile(), getMyPreferences()]);
+        if (!active) return;
         setProfile(profileResponse.profile);
-        setServices(servicesResponse.services);
+        setPreferences(prefsResponse);
+        setCountryNames(
+          Object.fromEntries(prefsResponse.catalog.countries.map((c) => [c.code, c.name])),
+        );
+        setLanguageNames(
+          Object.fromEntries(prefsResponse.catalog.languages.map((l) => [l.code, l.name])),
+        );
       } catch (nextError) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setError(nextError instanceof Error ? nextError.message : 'Unable to load your profile right now.');
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     };
 
     void load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const logOut = async (allDevices: boolean) => {
-    if (!csrfToken) {
-      return;
-    }
-
+    if (!csrfToken) return;
     setBusy(true);
     try {
       if (allDevices) {
@@ -75,6 +78,11 @@ export default function ProfileSummaryScreen() {
 
   const profileName = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim() || profile?.displayName || 'Your profile';
 
+  const sortedLanguages = [...(preferences?.contentLanguages ?? [])]
+    .sort((a: ContentLanguageSelection, b: ContentLanguageSelection) => a.sortOrder - b.sortOrder);
+
+  const marketName = preferences?.marketCode ? (countryNames[preferences.marketCode] ?? preferences.marketCode) : null;
+
   return (
     <ThemedView style={styles.container}>
       <AppHeader />
@@ -85,32 +93,59 @@ export default function ProfileSummaryScreen() {
             <ThemedText themeColor="textSecondary">Review your saved account details and recommendation preferences.</ThemedText>
           </View>
 
-          {loading ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
-          {error ? <ThemedText>{error}</ThemedText> : null}
+          {loading ? <ActivityIndicator size="small" color={BrandColors.scoutyBlue} /> : null}
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
 
+          {/* Account info */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
             {profile?.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} /> : null}
             <ThemedText type="smallBold">{profileName}</ThemedText>
-            {profile?.displayName && profile.displayName !== profileName ? <ThemedText themeColor="textSecondary">Display name: {profile.displayName}</ThemedText> : null}
-            <ThemedText themeColor="textSecondary">Country or region: {profile?.countryCode ?? 'Not set yet'}</ThemedText>
+            {profile?.displayName && profile.displayName !== profileName ? (
+              <ThemedText themeColor="textSecondary">Display name: {profile.displayName}</ThemedText>
+            ) : null}
             <ThemedText themeColor="textSecondary">Email: {user?.email ?? '—'}</ThemedText>
             <ThemedText themeColor="textSecondary">
               {user?.emailVerifiedAt ? 'Email verified' : 'Email not yet verified'}
             </ThemedText>
           </ThemedView>
 
+          {/* Viewing preferences */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
-            <ThemedText type="smallBold">Streaming services</ThemedText>
-            <ThemedText themeColor="textSecondary">{services.length ? services.map((service) => service.providerName).join(', ') : 'No streaming services selected yet.'}</ThemedText>
+            <ThemedText type="smallBold">Viewing preferences</ThemedText>
+
+            {!preferences || (!preferences.marketCode && preferences.streamingServices.length === 0 && preferences.contentLanguages.length === 0) ? (
+              <ThemedText themeColor="textSecondary" style={styles.emptyState}>
+                Tell Scouty where and how you like to watch, and your preferences will be ready for future recommendations.
+              </ThemedText>
+            ) : (
+              <>
+                <ThemedText themeColor="textSecondary">
+                  Streaming region: {marketName ?? 'Not set'}
+                </ThemedText>
+                <ThemedText themeColor="textSecondary">
+                  Streaming services: {
+                    preferences.streamingServices.length > 0
+                      ? preferences.streamingServices.map((s) => s.providerName).join(', ')
+                      : 'None selected'
+                  }
+                </ThemedText>
+                <ThemedText themeColor="textSecondary">
+                  Content languages: {
+                    sortedLanguages.length > 0
+                      ? sortedLanguages.map((l) => languageNames[l.languageCode] ?? l.languageCode).join(', ')
+                      : 'Any language'
+                  }
+                </ThemedText>
+                {preferences.viewingFormatPreference ? (
+                  <ThemedText themeColor="textSecondary">
+                    Subtitles/dubbing: {VIEWING_FORMAT_LABELS[preferences.viewingFormatPreference] ?? preferences.viewingFormatPreference}
+                  </ThemedText>
+                ) : null}
+              </>
+            )}
           </ThemedView>
 
-          <ThemedView type="backgroundElement" style={styles.sectionCard}>
-            <ThemedText type="smallBold">Public profiles</ThemedText>
-            <ThemedText themeColor="textSecondary">Letterboxd: {profile?.letterboxdProfileUrl || profile?.letterboxdUsername || 'Not connected'}</ThemedText>
-            <ThemedText themeColor="textSecondary">TV Time: {profile?.tvtimeProfileUrl || profile?.tvtimeUsername || 'Not connected'}</ThemedText>
-            <ThemedText themeColor="textSecondary">Viewing-history synchronization is not enabled yet.</ThemedText>
-          </ThemedView>
-
+          {/* Actions */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
             <View style={styles.buttonRow}>
               <Link href={'/profile/edit' as never} asChild>
@@ -118,14 +153,23 @@ export default function ProfileSummaryScreen() {
                   <ThemedText style={styles.primaryButtonText}>Edit profile</ThemedText>
                 </Pressable>
               </Link>
-              <Link href={'/profile/streaming-services' as never} asChild>
+              <Link href={'/profile/preferences' as never} asChild>
                 <Pressable style={styles.secondaryButton}>
-                  <ThemedText style={styles.secondaryButtonText}>Manage streaming services</ThemedText>
+                  <ThemedText style={styles.secondaryButtonText}>Edit preferences</ThemedText>
                 </Pressable>
               </Link>
             </View>
           </ThemedView>
 
+          {/* Public profiles */}
+          <ThemedView type="backgroundElement" style={styles.sectionCard}>
+            <ThemedText type="smallBold">Public profiles</ThemedText>
+            <ThemedText themeColor="textSecondary">Letterboxd: {profile?.letterboxdProfileUrl || profile?.letterboxdUsername || 'Not connected'}</ThemedText>
+            <ThemedText themeColor="textSecondary">TV Time: {profile?.tvtimeProfileUrl || profile?.tvtimeUsername || 'Not connected'}</ThemedText>
+            <ThemedText themeColor="textSecondary">Viewing-history synchronization is not enabled yet.</ThemedText>
+          </ThemedView>
+
+          {/* Security */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
             <ThemedText type="smallBold">Security</ThemedText>
             <View style={styles.buttonRow}>
@@ -163,4 +207,6 @@ const styles = StyleSheet.create({
   secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
   secondaryButtonText: { color: '#334155', fontWeight: '600' },
   avatar: { width: 88, height: 88, borderRadius: 44 },
+  emptyState: { fontStyle: 'italic' },
+  errorText: { color: '#b42318' },
 });

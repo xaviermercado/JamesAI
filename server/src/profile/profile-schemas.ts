@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import { allowedCountryCodes, allowedLanguageCodes, allowedProviderIds, streamingServiceCatalog } from './reference-data';
+
+export { streamingServiceCatalog } from './reference-data';
+
 const optionalUrl = z.string().trim().url().max(2048).nullable();
 const optionalName = z.string().trim().max(100).nullable();
 const optionalDisplayName = z.string().trim().max(80).nullable();
@@ -10,18 +14,25 @@ const personalName = z
   .max(80, 'Must be 80 characters or fewer')
   .regex(/^[\p{L}\p{M}][\p{L}\p{M}' -]*[\p{L}\p{M}]$|^[\p{L}\p{M}]$/u, 'Use letters, spaces, apostrophes, or hyphens only');
 
-export const streamingServiceCatalog = [
-  { providerId: 8, providerName: 'Netflix' },
-  { providerId: 9, providerName: 'Prime Video' },
-  { providerId: 2, providerName: 'Apple TV+' },
-  { providerId: 337, providerName: 'Disney+' },
-  { providerId: 1899, providerName: 'Max' },
-  { providerId: 531, providerName: 'Paramount+' },
-  { providerId: 15, providerName: 'Hulu' },
-  { providerId: 386, providerName: 'Peacock' },
-] as const;
+const marketCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .refine((code) => allowedCountryCodes.has(code), { message: 'Unsupported or unrecognised country code' });
 
-const allowedProviderIds = streamingServiceCatalog.map((service) => service.providerId) as [number, ...number[]];
+const languageCodeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine((code) => allowedLanguageCodes.has(code), { message: 'Unsupported or unrecognised language code' });
+
+const providerIdSchema = z
+  .number()
+  .int()
+  .refine((id) => allowedProviderIds.has(id), { message: 'Unsupported or unrecognised provider ID' });
+
+export const viewingFormatPreferenceValues = ['no_preference', 'subtitles_ok', 'prefer_dubbed'] as const;
+export type ViewingFormatPreference = (typeof viewingFormatPreferenceValues)[number];
 
 export const updateProfileSchema = z.object({
   firstName: personalName,
@@ -33,10 +44,37 @@ export const updateProfileSchema = z.object({
   letterboxdProfileUrl: optionalUrl.optional(),
   tvtimeUsername: optionalName.optional(),
   tvtimeProfileUrl: optionalUrl.optional(),
+  viewingFormatPreference: z.enum(viewingFormatPreferenceValues).nullable().optional(),
 });
 
 export const updateStreamingServicesSchema = z.object({
-  providerIds: z.array(z.number().int().refine((value) => allowedProviderIds.includes(value))).max(streamingServiceCatalog.length),
+  providerIds: z
+    .array(providerIdSchema)
+    .max(streamingServiceCatalog.length)
+    .transform((ids) => [...new Set(ids)]),
+});
+
+export const updateContentLanguagesSchema = z.object({
+  // Ordered array: index 0 = highest priority. Empty array means "any language".
+  languageCodes: z
+    .array(languageCodeSchema)
+    .max(30)
+    .transform((codes) => [...new Set(codes)]),
+});
+
+// Atomic preferences update: market + providers + languages + viewing format in one operation.
+export const updatePreferencesSchema = z.object({
+  marketCode: marketCodeSchema,
+  providerIds: z
+    .array(providerIdSchema)
+    .max(streamingServiceCatalog.length)
+    .transform((ids) => [...new Set(ids)]),
+  languageCodes: z
+    .array(languageCodeSchema)
+    .max(30)
+    .transform((codes) => [...new Set(codes)]),
+  viewingFormatPreference: z.enum(viewingFormatPreferenceValues).nullable(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;

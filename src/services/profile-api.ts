@@ -1,4 +1,13 @@
-import type { StreamingServiceCatalogItem, UpdateUserProfileInput, UserProfile, UserStreamingService } from '@/types/profile';
+import type {
+  ContentLanguageSelection,
+  PreferencesCatalog,
+  StreamingServiceCatalogItem,
+  UpdatePreferencesInput,
+  UpdateUserProfileInput,
+  UserPreferences,
+  UserProfile,
+  UserStreamingService,
+} from '@/types/profile';
 
 import { requestJson } from './http-client';
 
@@ -26,4 +35,32 @@ export async function updateMyStreamingServices(providerIds: number[], csrfToken
     headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
     body: JSON.stringify({ providerIds }),
   });
+}
+
+export async function getMyContentLanguages(): Promise<{ languages: ContentLanguageSelection[] }> {
+  return requestJson<{ languages: ContentLanguageSelection[] }>('/api/profile/content-languages', { method: 'GET' });
+}
+
+export async function updateMyContentLanguages(languageCodes: string[], csrfToken?: string | null): Promise<{ languages: ContentLanguageSelection[] }> {
+  return requestJson<{ languages: ContentLanguageSelection[] }>('/api/profile/content-languages', {
+    method: 'PATCH',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+    body: JSON.stringify({ languageCodes }),
+  });
+}
+
+export async function getMyPreferences(): Promise<UserPreferences & { catalog: PreferencesCatalog }> {
+  return requestJson<UserPreferences & { catalog: PreferencesCatalog }>('/api/profile/preferences', { method: 'GET' });
+}
+
+export async function updateMyPreferences(input: UpdatePreferencesInput, csrfToken?: string | null): Promise<UserPreferences> {
+  return requestJson<UserPreferences>('/api/profile/preferences', {
+    method: 'PATCH',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getPreferenceReferenceData(): Promise<PreferencesCatalog> {
+  return requestJson<PreferencesCatalog>('/api/profile/reference', { method: 'GET' });
 }

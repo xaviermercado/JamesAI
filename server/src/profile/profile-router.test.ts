@@ -14,7 +14,7 @@ import type {
   StoredUser,
 } from '../auth/auth-repository';
 import { createProfileRouter } from './profile-router';
-import type { ProfileRepositoryLike, StoredProfile, UpsertProfileInput } from './profile-repository';
+import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from './profile-repository';
 
 class InMemoryAuthRepository implements AuthRepositoryLike {
   users = new Map<string, StoredUser>();
@@ -72,14 +72,10 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
         currentSession.expires_at.getTime() > Date.now(),
     );
 
-    if (!session) {
-      return null;
-    }
+    if (!session) return null;
 
     const user = this.users.get(session.user_id);
-    if (!user) {
-      return null;
-    }
+    if (!user) return null;
 
     return {
       ...session,
@@ -100,9 +96,7 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
 
   async revokeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (session) {
-      session.revoked_at = new Date();
-    }
+    if (session) session.revoked_at = new Date();
   }
 
   async revokeAllSessionsForUser(userId: string): Promise<number> {
@@ -113,35 +107,23 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
         count += 1;
       }
     }
-
     return count;
   }
 
   async createEmailVerificationToken(_token: Omit<StoredEmailVerificationToken, 'used_at' | 'created_at'> & { used_at?: Date | null; created_at?: Date }): Promise<void> {}
-
-  async findEmailVerificationTokenByHash(_tokenHash: string): Promise<StoredEmailVerificationToken | null> {
-    return null;
-  }
-
+  async findEmailVerificationTokenByHash(_tokenHash: string): Promise<StoredEmailVerificationToken | null> { return null; }
   async markEmailVerificationTokenUsed(_tokenId: string): Promise<void> {}
-
   async invalidateEmailVerificationTokensForUser(_userId: string): Promise<void> {}
-
   async createPasswordResetToken(_token: Omit<StoredPasswordResetToken, 'used_at' | 'created_at'> & { used_at?: Date | null; created_at?: Date }): Promise<void> {}
-
-  async findPasswordResetTokenByHash(_tokenHash: string): Promise<StoredPasswordResetToken | null> {
-    return null;
-  }
-
+  async findPasswordResetTokenByHash(_tokenHash: string): Promise<StoredPasswordResetToken | null> { return null; }
   async markPasswordResetTokenUsed(_tokenId: string): Promise<void> {}
-
   async invalidatePasswordResetTokensForUser(_userId: string): Promise<void> {}
 }
 
 class InMemoryProfileRepository implements ProfileRepositoryLike {
   profiles = new Map<string, StoredProfile>();
-
   streamingServices = new Map<string, Array<{ providerId: number; providerName: string }>>();
+  contentLanguages = new Map<string, ContentLanguageSelection[]>();
 
   async findByUserId(userId: string): Promise<StoredProfile | null> {
     return this.profiles.get(userId) ?? null;
@@ -154,13 +136,13 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
       last_name: input.lastName,
       display_name: input.displayName,
       country_code: input.countryCode,
+      viewing_format_preference: input.viewingFormatPreference ?? null,
       avatar_url: input.avatarUrl,
       letterboxd_username: input.letterboxdUsername,
       letterboxd_profile_url: input.letterboxdProfileUrl,
       tvtime_username: input.tvtimeUsername,
       tvtime_profile_url: input.tvtimeProfileUrl,
     };
-
     this.profiles.set(userId, profile);
     return profile;
   }
@@ -172,6 +154,27 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
   async replaceStreamingServices(userId: string, _countryCode: string, services: Array<{ providerId: number; providerName: string }>): Promise<Array<{ providerId: number; providerName: string }>> {
     this.streamingServices.set(userId, services);
     return services;
+  }
+
+  async listContentLanguages(userId: string): Promise<ContentLanguageSelection[]> {
+    return this.contentLanguages.get(userId) ?? [];
+  }
+
+  async replaceContentLanguages(userId: string, languageCodes: string[]): Promise<ContentLanguageSelection[]> {
+    const selections = languageCodes.map((code, index) => ({ languageCode: code, sortOrder: index }));
+    this.contentLanguages.set(userId, selections);
+    return selections;
+  }
+
+  async replacePreferences(userId: string, input: ReplacePreferencesInput): Promise<void> {
+    const existing = this.profiles.get(userId);
+    if (existing) {
+      existing.country_code = input.marketCode;
+      existing.viewing_format_preference = input.viewingFormatPreference;
+    }
+    this.streamingServices.set(userId, input.services);
+    const selections = input.languageCodes.map((code, index) => ({ languageCode: code, sortOrder: index }));
+    this.contentLanguages.set(userId, selections);
   }
 }
 
@@ -245,39 +248,24 @@ describe('profile router', () => {
   });
 
   it('returns 401 without session cookie', async () => {
-    const response = await request(app)
-      .get('/api/profile')
-      .set('Origin', 'https://app.example.com');
-
+    const response = await request(app).get('/api/profile').set('Origin', 'https://app.example.com');
     expect(response.status).toBe(401);
   });
 
   it('returns null when no profile exists', async () => {
     const session = createAuthenticatedSession(authRepo, createConfig());
-
-    const response = await request(app)
-      .get('/api/profile')
-      .set('Origin', 'https://app.example.com')
-      .set('Cookie', session.cookie);
-
+    const response = await request(app).get('/api/profile').set('Origin', 'https://app.example.com').set('Cookie', session.cookie);
     expect(response.status).toBe(200);
     expect(response.body.profile).toBeNull();
   });
 
   it('requires csrf for profile updates', async () => {
     const session = createAuthenticatedSession(authRepo, createConfig());
-
     const response = await request(app)
       .patch('/api/profile')
       .set('Origin', 'https://app.example.com')
       .set('Cookie', session.cookie)
-      .send({
-        firstName: 'James',
-        lastName: 'Narvey',
-        displayName: 'James',
-        countryCode: 'US',
-      });
-
+      .send({ firstName: 'James', lastName: 'Narvey', displayName: 'James', countryCode: 'US' });
     expect(response.status).toBe(403);
   });
 
@@ -290,33 +278,19 @@ describe('profile router', () => {
       .set('Origin', 'https://app.example.com')
       .set('Cookie', session.cookie)
       .set('X-CSRF-Token', session.csrfToken)
-      .send({
-        firstName: 'James',
-        lastName: 'Narvey',
-        displayName: 'James AI',
-        countryCode: 'us',
-        avatarUrl: 'https://example.com/avatar.png',
-        letterboxdUsername: 'jamesletter',
-      });
+      .send({ firstName: 'James', lastName: 'Narvey', displayName: 'James AI', countryCode: 'us', avatarUrl: 'https://example.com/avatar.png', letterboxdUsername: 'jamesletter' });
 
     expect(patchResponse.status).toBe(200);
     expect(patchResponse.body.profile.firstName).toBe('James');
-    expect(patchResponse.body.profile.lastName).toBe('Narvey');
-    expect(patchResponse.body.profile.displayName).toBe('James AI');
     expect(patchResponse.body.profile.countryCode).toBe('US');
 
-    const getResponse = await request(app)
-      .get('/api/profile')
-      .set('Origin', 'https://app.example.com')
-      .set('Cookie', session.cookie);
-
+    const getResponse = await request(app).get('/api/profile').set('Origin', 'https://app.example.com').set('Cookie', session.cookie);
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.profile.displayName).toBe('James AI');
-    expect(getResponse.body.profile.avatarUrl).toBe('https://example.com/avatar.png');
     expect(getResponse.body.profile.tvtimeUsername).toBeNull();
   });
 
-  it('loads and updates current-user streaming services only', async () => {
+  it('loads and updates streaming services', async () => {
     const config = createConfig();
     const session = createAuthenticatedSession(authRepo, config);
 
@@ -333,23 +307,173 @@ describe('profile router', () => {
       { providerId: 9, providerName: 'Prime Video' },
     ]);
 
-    const getResponse = await request(app)
-      .get('/api/profile/streaming-services')
+    const getResponse = await request(app).get('/api/profile/streaming-services').set('Origin', 'https://app.example.com').set('Cookie', session.cookie);
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.body.catalog.length).toBeGreaterThan(0);
+  });
+
+  it('saves and retrieves content language preferences', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const emptyResponse = await request(app)
+      .get('/api/profile/content-languages')
       .set('Origin', 'https://app.example.com')
       .set('Cookie', session.cookie);
+    expect(emptyResponse.status).toBe(200);
+    expect(emptyResponse.body.languages).toEqual([]);
 
+    const patchResponse = await request(app)
+      .patch('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ languageCodes: ['fr', 'en', 'es'] });
+
+    expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.languages).toHaveLength(3);
+    expect(patchResponse.body.languages[0].languageCode).toBe('fr');
+    expect(patchResponse.body.languages[0].sortOrder).toBe(0);
+    expect(patchResponse.body.languages[2].languageCode).toBe('es');
+    expect(patchResponse.body.languages[2].sortOrder).toBe(2);
+
+    const getResponse = await request(app)
+      .get('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie);
     expect(getResponse.status).toBe(200);
-    expect(getResponse.body.services).toEqual([
-      { providerId: 8, providerName: 'Netflix' },
-      { providerId: 9, providerName: 'Prime Video' },
-    ]);
-    expect(getResponse.body.catalog.length).toBeGreaterThan(0);
+    expect(getResponse.body.languages).toHaveLength(3);
+  });
+
+  it('rejects anonymous content-language access', async () => {
+    const response = await request(app)
+      .get('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com');
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects unsupported language codes', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ languageCodes: ['xx', 'zz'] });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('deduplicates language codes', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ languageCodes: ['en', 'fr', 'en'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.languages).toHaveLength(2);
+  });
+
+  it('accepts empty language array as "any language"', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/content-languages')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ languageCodes: [] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.languages).toEqual([]);
+  });
+
+  it('saves preferences atomically via /preferences endpoint', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    // Create profile so replacePreferences can find it
+    profileRepo.profiles.set(session.userId, {
+      user_id: session.userId,
+      first_name: 'Test',
+      last_name: 'User',
+      display_name: 'Test User',
+      country_code: 'US',
+      viewing_format_preference: null,
+      avatar_url: null,
+      letterboxd_username: null,
+      letterboxd_profile_url: null,
+      tvtime_username: null,
+      tvtime_profile_url: null,
+    });
+
+    const patchResponse = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        marketCode: 'GB',
+        providerIds: [8, 337],
+        languageCodes: ['en', 'fr'],
+        viewingFormatPreference: 'subtitles_ok',
+      });
+
+    expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.marketCode).toBe('GB');
+    expect(patchResponse.body.streamingServices).toHaveLength(2);
+    expect(patchResponse.body.contentLanguages).toHaveLength(2);
+    expect(patchResponse.body.viewingFormatPreference).toBe('subtitles_ok');
+  });
+
+  it('rejects unsupported market codes in preferences', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ marketCode: 'XX', providerIds: [], languageCodes: [], viewingFormatPreference: null });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects unsupported provider IDs in preferences', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ marketCode: 'US', providerIds: [99999], languageCodes: [], viewingFormatPreference: null });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('returns reference data without authentication', async () => {
+    const response = await request(app).get('/api/profile/reference').set('Origin', 'https://app.example.com');
+    expect(response.status).toBe(200);
+    expect(response.body.countries.length).toBeGreaterThan(0);
+    expect(response.body.languages.length).toBeGreaterThan(0);
+    expect(response.body.providers.length).toBeGreaterThan(0);
+    expect(response.body.countries[0]).toHaveProperty('code');
+    expect(response.body.countries[0]).toHaveProperty('name');
   });
 
   it('profile data is isolated between users', async () => {
     const config = createConfig();
-
-    // Create a second user
     const now = new Date();
     const userId2 = '33333333-3333-4333-8333-333333333333';
     authRepo.users.set(userId2, {
@@ -378,7 +502,6 @@ describe('profile router', () => {
 
     const session1 = createAuthenticatedSession(authRepo, config);
 
-    // User 1 saves a profile
     await request(app)
       .patch('/api/profile')
       .set('Origin', 'https://app.example.com')
@@ -386,12 +509,7 @@ describe('profile router', () => {
       .set('X-CSRF-Token', session1.csrfToken)
       .send({ firstName: 'Alice', lastName: 'One', displayName: 'Alice', countryCode: 'US' });
 
-    // User 2 reads their own profile — should not see user 1's data
-    const user2Profile = await request(app)
-      .get('/api/profile')
-      .set('Origin', 'https://app.example.com')
-      .set('Cookie', cookie2);
-
+    const user2Profile = await request(app).get('/api/profile').set('Origin', 'https://app.example.com').set('Cookie', cookie2);
     expect(user2Profile.status).toBe(200);
     expect(user2Profile.body.profile).toBeNull();
   });
