@@ -46,4 +46,30 @@ describe('getHeroPresentationData', () => {
     expect(day.period).toBe('day');
     expect(night.period).toBe('night');
   });
+
+  it('uses the approved wording "wanna" in both headings', () => {
+    const day = getHeroPresentationData(at(10, 0));
+    const night = getHeroPresentationData(at(21, 0));
+    expect(day.heading).toContain('wanna');
+    expect(night.heading).toContain('wanna');
+  });
+
+  it('each presentation includes a non-empty overlayColor', () => {
+    const day = getHeroPresentationData(at(10, 0));
+    const night = getHeroPresentationData(at(21, 0));
+    expect(day.overlayColor.length).toBeGreaterThan(0);
+    expect(night.overlayColor.length).toBeGreaterThan(0);
+  });
+
+  it('heading and overlayColor are always consistent with period', () => {
+    for (let hour = 0; hour < 24; hour++) {
+      const d = getHeroPresentationData(at(hour));
+      if (d.period === 'day') {
+        expect(d.heading).toMatch(/today/);
+      } else {
+        expect(d.heading).toMatch(/tonight/);
+      }
+      expect(d.overlayColor).toBeTruthy();
+    }
+  });
 });

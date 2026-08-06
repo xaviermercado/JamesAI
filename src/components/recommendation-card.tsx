@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { useWindowDimensions, StyleSheet, View } from 'react-native';
 
 import { FeedbackActions } from '@/components/feedback-actions';
 import { MoviePoster } from '@/components/movie-poster';
@@ -18,10 +18,13 @@ export function RecommendationCard({
   selectedAction,
   onAction,
 }: RecommendationCardProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
   const metadata = [
-    recommendation.releaseYear ? String(recommendation.releaseYear) : 'Unknown year',
-    recommendation.runtimeMinutes ? `${recommendation.runtimeMinutes} min` : 'Runtime unavailable',
-  ];
+    recommendation.releaseYear ? String(recommendation.releaseYear) : null,
+    recommendation.runtimeMinutes ? `${recommendation.runtimeMinutes} min` : null,
+  ].filter((v): v is string => Boolean(v));
 
   const providers = recommendation.providers.length ? recommendation.providers : ['No providers listed'];
   const genres = recommendation.genres.length ? recommendation.genres : ['Genre unavailable'];
@@ -31,19 +34,21 @@ export function RecommendationCard({
       <MoviePoster title={recommendation.title} posterUrl={recommendation.posterUrl} rating={recommendation.tmdbRating} />
 
       <View style={styles.content}>
-        <ThemedText type="smallBold" style={styles.title}>
+        <ThemedText type="smallBold" style={[styles.title, isMobile && styles.titleMobile]}>
           {recommendation.title}
         </ThemedText>
 
-        <View style={styles.metaRow}>
-          {metadata.map((item) => (
-            <View key={item} style={styles.metaChip}>
-              <ThemedText themeColor="textSecondary" style={styles.metaText}>
-                {item}
-              </ThemedText>
-            </View>
-          ))}
-        </View>
+        {metadata.length > 0 ? (
+          <View style={styles.metaRow}>
+            {metadata.map((item) => (
+              <View key={item} style={styles.metaChip}>
+                <ThemedText themeColor="textSecondary" style={styles.metaText}>
+                  {item}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.chipRow}>
           {genres.slice(0, 3).map((genre) => (
@@ -52,8 +57,6 @@ export function RecommendationCard({
             </View>
           ))}
         </View>
-
-        <ThemedText numberOfLines={4} themeColor="textSecondary" style={styles.overview}>{recommendation.explanation}</ThemedText>
 
         <View style={styles.reasonBlock}>
           <ThemedText type="smallBold" style={styles.reasonLabel}>Why Scouty picked it</ThemedText>
@@ -83,14 +86,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BrandColors.border,
     boxShadow: '0 10px 30px rgba(11, 22, 51, 0.08)',
+    minWidth: 0,
   },
   content: {
     gap: Spacing.two,
+    minWidth: 0,
   },
   title: {
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 20,
+    lineHeight: 26,
     color: BrandColors.midnight900,
+  },
+  titleMobile: {
+    fontSize: 17,
+    lineHeight: 22,
   },
   metaRow: {
     flexDirection: 'row',
@@ -104,7 +113,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef3ff',
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   chipRow: {
     flexDirection: 'row',
@@ -121,20 +130,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: BrandColors.midnight800,
   },
-  overview: {
-    fontSize: 15,
-    lineHeight: 24,
-  },
   reasonBlock: {
     gap: Spacing.one,
-    paddingTop: Spacing.one,
   },
   reasonLabel: {
     color: BrandColors.scoutyBlue,
   },
   explanation: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
   },
   providerRow: {
     flexDirection: 'row',

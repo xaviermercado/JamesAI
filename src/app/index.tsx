@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     gap: Spacing.four,
   },
@@ -214,12 +214,13 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   howCard: {
-    flexBasis: 280,
+    flexBasis: 260,
     flexGrow: 1,
     borderRadius: Radii.large,
     padding: Spacing.three,
     gap: Spacing.two,
     borderWidth: 1,
     borderColor: BrandColors.border,
+    minWidth: 0,
   },
 });
