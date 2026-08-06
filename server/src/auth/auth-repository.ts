@@ -31,6 +31,7 @@ export interface StoredProfileSeed {
   display_name: string;
   country_code: string;
   avatar_url: string | null;
+  avatar_id?: string | null;
   letterboxd_username: string | null;
   letterboxd_profile_url: string | null;
   tvtime_username: string | null;
@@ -122,7 +123,7 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
 
   async createProfile(profile: StoredProfileSeed): Promise<void> {
     await this.executor.query(
-      'INSERT INTO profiles (user_id, first_name, last_name, display_name, country_code, avatar_url, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO profiles (user_id, first_name, last_name, display_name, country_code, avatar_url, avatar_id, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         profile.user_id,
         profile.first_name,
@@ -130,6 +131,7 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
         profile.display_name,
         profile.country_code,
         profile.avatar_url,
+        profile.avatar_id ?? null,
         profile.letterboxd_username,
         profile.letterboxd_profile_url,
         profile.tvtime_username,

@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import countries from 'i18n-iso-countries';
+import enLocale from 'i18n-iso-countries/langs/en.json';
+
+countries.registerLocale(enLocale);
+
+const allowedCountryCodes = new Set(
+  Object.keys(countries.getNames('en', { select: 'official' }))
+    .filter((code) => code.length === 2),
+);
 
 const nameSchema = z
   .string()
@@ -11,8 +20,7 @@ export const editProfileSchema = z.object({
   firstName: nameSchema,
   lastName: nameSchema,
   displayName: z.string().trim().max(80, 'Must be 80 characters or fewer').optional(),
-  countryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Use a 2-letter country code'),
-  avatarUrl: z.string().trim().url('Enter a valid URL').max(2048).optional().or(z.literal('')),
+  countryCode: z.string().trim().toUpperCase().refine((code) => allowedCountryCodes.has(code), 'Use a supported 2-letter country code'),
   letterboxdUsername: z.string().trim().max(100).optional(),
   letterboxdProfileUrl: z.string().trim().url('Enter a valid URL').max(2048).optional().or(z.literal('')),
   tvtimeUsername: z.string().trim().max(100).optional(),

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,15 +13,20 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ENGINE_CREDIT } from '@/constants/brand';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { getMyFeedback, removeMyFeedback, submitMyFeedback } from '@/services/feedback-api';
+import { getMyLibraryStates, updateMyLibraryAction } from '@/services/library-api';
 import { getMyPreferences } from '@/services/profile-api';
 import { getRecommendations } from '@/services/recommendations-api';
+import type { LibraryAction, LibraryStatus } from '@/types/library';
 import type { MediaType, MovieRecommendation, RecommendationRequest, RecommendationResponse } from '@/types/recommendations';
 import type { UserPreferences } from '@/types/profile';
 
 type FeedbackAction = 'like' | 'dislike' | 'watched';
 
 export default function HomeScreen() {
-  const { status } = useAuthSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { status, csrfToken } = useAuthSession();
 
   const [description, setDescription] = useState('');
   const [mediaType, setMediaType] = useState<MediaType>('movie');
@@ -37,10 +43,23 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [feedbackById, setFeedbackById] = useState<Record<number, FeedbackAction>>({});
+  const [feedbackByKey, setFeedbackByKey] = useState<Record<string, FeedbackAction>>({});
+  const [feedbackSubmittingByKey, setFeedbackSubmittingByKey] = useState<Record<string, boolean>>({});
+  const [feedbackErrorByKey, setFeedbackErrorByKey] = useState<Record<string, string | null>>({});
+  const [libraryStatusByKey, setLibraryStatusByKey] = useState<Record<string, LibraryStatus | null>>({});
+  const [librarySubmittingByKey, setLibrarySubmittingByKey] = useState<Record<string, boolean>>({});
+  const [libraryErrorByKey, setLibraryErrorByKey] = useState<Record<string, string | null>>({});
 
   // Abort controller to cancel stale in-flight requests.
   const abortRef = useRef<AbortController | null>(null);
+  const feedbackRequestVersionRef = useRef<Record<string, number>>({});
+  const libraryRequestVersionRef = useRef<Record<string, number>>({});
+
+  const feedbackKeyFor = (item: Pick<MovieRecommendation, 'tmdbMovieId' | 'mediaType'>) =>
+    `${item.mediaType}:${item.tmdbMovieId}`;
+
+  const libraryKeyFor = (item: Pick<MovieRecommendation, 'tmdbMovieId' | 'mediaType'>) =>
+    `${item.mediaType}:${item.tmdbMovieId}`;
 
   // Load saved preferences for authenticated users.
   useEffect(() => {
@@ -53,6 +72,71 @@ export default function HomeScreen() {
       })
       .catch(() => {
         // Non-fatal: preferences unavailable, continue anonymously.
+      });
+
+    return () => { active = false; };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== 'authenticated') {
+      setLibraryStatusByKey({});
+      setLibraryErrorByKey({});
+      return;
+    }
+
+    if (recommendations.length === 0) {
+      setLibraryStatusByKey({});
+      return;
+    }
+
+    let active = true;
+    const titles = recommendations.map((item) => ({
+      tmdbId: item.tmdbMovieId,
+      mediaType: item.mediaType,
+    }));
+
+    void getMyLibraryStates(titles)
+      .then((response) => {
+        if (!active) return;
+        const next: Record<string, LibraryStatus | null> = {};
+        for (const state of response.states) {
+          next[`${state.mediaType}:${state.tmdbId}`] = state.status;
+        }
+        setLibraryStatusByKey(next);
+      })
+      .catch(() => {
+        if (!active) return;
+        setLibraryStatusByKey({});
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [recommendations, status]);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    let active = true;
+    setFeedbackByKey({});
+    setFeedbackErrorByKey({});
+
+    void getMyFeedback()
+      .then((response) => {
+        if (!active) return;
+        const next: Record<string, FeedbackAction> = {};
+        for (const item of response.feedback) {
+          const action = item.feedbackType === 'liked'
+            ? 'like'
+            : item.feedbackType === 'disliked'
+              ? 'dislike'
+              : 'watched';
+          next[`${item.mediaType}:${item.tmdbId}`] = action;
+        }
+        setFeedbackByKey(next);
+      })
+      .catch(() => {
+        if (!active) return;
       });
 
     return () => { active = false; };
@@ -111,8 +195,96 @@ export default function HomeScreen() {
     }
   };
 
+  const persistFeedback = async (
+    nextAction: FeedbackAction | null,
+    recommendation: MovieRecommendation,
+  ) => {
+    const key = feedbackKeyFor(recommendation);
+    const previous = feedbackByKey[key];
+
+    setFeedbackByKey((current) => {
+      const next = { ...current };
+      if (nextAction === null) {
+        delete next[key];
+      } else {
+        next[key] = nextAction;
+      }
+      return next;
+    });
+    setFeedbackErrorByKey((current) => ({ ...current, [key]: null }));
+    setFeedbackSubmittingByKey((current) => ({ ...current, [key]: true }));
+
+    const nextVersion = (feedbackRequestVersionRef.current[key] ?? 0) + 1;
+    feedbackRequestVersionRef.current[key] = nextVersion;
+
+    try {
+      if (nextAction === null) {
+        await removeMyFeedback(recommendation.tmdbMovieId, recommendation.mediaType, csrfToken);
+      } else {
+        const feedbackType = nextAction === 'like'
+          ? 'liked'
+          : nextAction === 'dislike'
+            ? 'disliked'
+            : 'watched';
+
+        await submitMyFeedback(
+          {
+            tmdbId: recommendation.tmdbMovieId,
+            mediaType: recommendation.mediaType,
+            feedbackType,
+            genres: recommendation.genres.slice(0, 3),
+            originalLanguage: recommendation.originalLanguage,
+          },
+          csrfToken,
+        );
+      }
+    } catch (nextError) {
+      if (feedbackRequestVersionRef.current[key] === nextVersion) {
+        setFeedbackByKey((current) => {
+          const next = { ...current };
+          if (previous === undefined) {
+            delete next[key];
+          } else {
+            next[key] = previous;
+          }
+          return next;
+        });
+        setFeedbackErrorByKey((current) => ({
+          ...current,
+          [key]: nextError instanceof Error ? nextError.message : 'Unable to save feedback right now.',
+        }));
+      }
+    } finally {
+      if (feedbackRequestVersionRef.current[key] === nextVersion) {
+        setFeedbackSubmittingByKey((current) => ({ ...current, [key]: false }));
+      }
+    }
+  };
+
   const handleAction = (action: FeedbackAction, recommendation: MovieRecommendation) => {
-    setFeedbackById((current) => ({ ...current, [recommendation.tmdbMovieId]: action }));
+    const key = feedbackKeyFor(recommendation);
+    const current = feedbackByKey[key];
+
+    if (status !== 'authenticated' || !csrfToken) {
+      setFeedbackByKey((prev) => ({ ...prev, [key]: action }));
+      return;
+    }
+
+    const nextAction = current === action ? null : action;
+    void persistFeedback(nextAction, recommendation);
+  };
+
+  const handleRemoveFeedback = (recommendation: MovieRecommendation) => {
+    if (status !== 'authenticated' || !csrfToken) {
+      const key = feedbackKeyFor(recommendation);
+      setFeedbackByKey((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    void persistFeedback(null, recommendation);
   };
 
   const clearFilters = () => {
@@ -121,6 +293,65 @@ export default function HomeScreen() {
     setCountryOverride('');
     setStreamingServices('');
     setLanguageOverride(null);
+  };
+
+  const persistLibraryState = async (action: LibraryAction, recommendation: MovieRecommendation) => {
+    const key = libraryKeyFor(recommendation);
+    const previous = libraryStatusByKey[key] ?? null;
+
+    setLibraryErrorByKey((current) => ({ ...current, [key]: null }));
+    setLibrarySubmittingByKey((current) => ({ ...current, [key]: true }));
+
+    const nextVersion = (libraryRequestVersionRef.current[key] ?? 0) + 1;
+    libraryRequestVersionRef.current[key] = nextVersion;
+
+    // Optimistic state for responsive controls.
+    setLibraryStatusByKey((current) => ({
+      ...current,
+      [key]: action === 'remove' ? null : action === 'mark_watched' ? 'watched' : 'watchlist',
+    }));
+
+    try {
+      const response = await updateMyLibraryAction(
+        {
+          tmdbId: recommendation.tmdbMovieId,
+          mediaType: recommendation.mediaType,
+          action,
+        },
+        csrfToken,
+      );
+
+      if (libraryRequestVersionRef.current[key] === nextVersion) {
+        setLibraryStatusByKey((current) => ({
+          ...current,
+          [key]: response.state?.status ?? null,
+        }));
+      }
+    } catch (nextError) {
+      if (libraryRequestVersionRef.current[key] === nextVersion) {
+        setLibraryStatusByKey((current) => ({
+          ...current,
+          [key]: previous,
+        }));
+        setLibraryErrorByKey((current) => ({
+          ...current,
+          [key]: nextError instanceof Error ? nextError.message : 'Unable to update your library right now.',
+        }));
+      }
+    } finally {
+      if (libraryRequestVersionRef.current[key] === nextVersion) {
+        setLibrarySubmittingByKey((current) => ({ ...current, [key]: false }));
+      }
+    }
+  };
+
+  const handleLibraryAction = (action: LibraryAction, recommendation: MovieRecommendation) => {
+    if (status !== 'authenticated' || !csrfToken) {
+      router.push(`/login?redirectTo=${encodeURIComponent(pathname || '/')}`);
+      return;
+    }
+
+    void persistLibraryState(action, recommendation);
   };
 
   // Build a human-readable summary of which saved preferences are active.
@@ -139,6 +370,18 @@ export default function HomeScreen() {
     if (parts.length === 0) return null;
     return `Using your saved preferences: ${parts.join(', ')}`;
   })();
+
+  const feedbackById = Object.fromEntries(
+    recommendations.map((item) => [item.tmdbMovieId, feedbackByKey[feedbackKeyFor(item)]]),
+  ) as Record<number, FeedbackAction>;
+
+  const feedbackSubmittingById = Object.fromEntries(
+    recommendations.map((item) => [item.tmdbMovieId, Boolean(feedbackSubmittingByKey[feedbackKeyFor(item)])]),
+  ) as Record<number, boolean>;
+
+  const feedbackErrorById = Object.fromEntries(
+    recommendations.map((item) => [item.tmdbMovieId, feedbackErrorByKey[feedbackKeyFor(item)] ?? null]),
+  ) as Record<number, string | null>;
 
   return (
     <ThemedView style={styles.container}>
@@ -201,9 +444,30 @@ export default function HomeScreen() {
                       Recommendations reflect your saved preferences.
                     </ThemedText>
                   ) : null}
+                  {lastResult?.feedbackPersonalizationApplied ? (
+                    <ThemedText themeColor="textSecondary" accessibilityLiveRegion="polite" style={styles.prefNotice}>
+                      Also informed by your feedback.
+                    </ThemedText>
+                  ) : null}
                   {isLoading ? <ThemedText themeColor="textSecondary">Refreshing your picks...</ThemedText> : null}
                 </View>
-                <RecommendationGrid recommendations={recommendations} feedbackById={feedbackById} onAction={handleAction} />
+                {status === 'authenticated' ? (
+                  <ThemedText themeColor="textSecondary" style={styles.prefNotice}>
+                    Your feedback can improve future recommendations. It won&apos;t change your saved preferences.
+                  </ThemedText>
+                ) : null}
+                <RecommendationGrid
+                  recommendations={recommendations}
+                  feedbackById={feedbackById}
+                  onAction={handleAction}
+                  onRemoveFeedback={handleRemoveFeedback}
+                  libraryStatusByKey={libraryStatusByKey}
+                  onLibraryAction={handleLibraryAction}
+                  librarySubmittingByKey={librarySubmittingByKey}
+                  libraryErrorByKey={libraryErrorByKey}
+                  feedbackSubmittingById={feedbackSubmittingById}
+                  feedbackErrorById={feedbackErrorById}
+                />
               </View>
             ) : null}
 

@@ -37,11 +37,18 @@ export function AppHeader() {
 
         <View style={styles.actionsRow}>
           {status === 'authenticated' ? (
-            <Link href={'/profile' as never} asChild>
-              <Pressable accessibilityRole="link" accessibilityLabel="Open your profile" style={navButtonStyle('ghost')}>
-                <ThemedText style={styles.ghostText}>{profileLabel}</ThemedText>
-              </Pressable>
-            </Link>
+            <>
+              <Link href={'/profile/library' as never} asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel="Open your library" style={navButtonStyle('ghost')}>
+                  <ThemedText style={styles.ghostText}>Library</ThemedText>
+                </Pressable>
+              </Link>
+              <Link href={'/profile' as never} asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel="Open your profile" style={navButtonStyle('ghost')}>
+                  <ThemedText style={styles.ghostText}>{profileLabel}</ThemedText>
+                </Pressable>
+              </Link>
+            </>
           ) : (
             <>
               <Link href="/login" asChild>

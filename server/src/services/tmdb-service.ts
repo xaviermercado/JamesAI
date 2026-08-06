@@ -308,6 +308,7 @@ export class TmdbService {
           providers,
           country: request.country ?? '',
           mediaType: request.mediaType ?? 'movie',
+          originalLanguage: details.original_language?.toLowerCase(),
         });
       } catch (error) {
         console.error(`[TMDB] enrichCandidates failed for id ${candidate.id}:`, error);
@@ -319,6 +320,50 @@ export class TmdbService {
 
   async getMovieProviders(movieId: number, mediaType: 'movie' | 'tv', country?: string): Promise<string[]> {
     return this.getWatchProviders(movieId, mediaType, country);
+  }
+
+  async getTitleSummary(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<MovieCandidate | null> {
+    try {
+      const details = await this.requestJson<TmdbMovieDetailsResult>(
+        `${this.config.baseUrl}/${mediaType}/${tmdbId}`,
+        { language: 'en-US' },
+      );
+
+      const title = details.title ?? details.name ?? `Title #${tmdbId}`;
+      const releaseDate = details.release_date ?? details.first_air_date ?? '';
+      const releaseYear = releaseDate ? Number(releaseDate.slice(0, 4)) : 0;
+      const runtime = details.runtime ?? details.episode_run_time?.[0] ?? 0;
+      const genres = (details.genres ?? []).map((g) => g.name);
+      const posterUrl = details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '';
+
+      return {
+        tmdbMovieId: tmdbId,
+        title,
+        posterUrl,
+        releaseYear,
+        runtimeMinutes: runtime,
+        tmdbRating: details.vote_average ?? 0,
+        genres,
+        providers: [],
+        country: '',
+        mediaType,
+        originalLanguage: details.original_language?.toLowerCase(),
+      };
+    } catch (error) {
+      console.error(`[TMDB] getTitleSummary failed for ${mediaType}:${tmdbId}:`, error);
+      return null;
+    }
+  }
+
+  async getTitleSummaries(
+    titles: Array<{ tmdbId: number; mediaType: 'movie' | 'tv' }>,
+  ): Promise<MovieCandidate[]> {
+    const capped = titles.slice(0, 100);
+    const summaries = await Promise.all(
+      capped.map(async (title) => this.getTitleSummary(title.tmdbId, title.mediaType)),
+    );
+
+    return summaries.filter((item): item is MovieCandidate => item !== null);
   }
 
   private async getWatchProviders(id: number, mediaType: 'movie' | 'tv', country?: string): Promise<string[]> {

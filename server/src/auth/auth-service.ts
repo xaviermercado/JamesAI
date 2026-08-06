@@ -116,6 +116,7 @@ export class AuthService {
         display_name: displayName,
         country_code: 'US',
         avatar_url: null,
+        avatar_id: null,
         letterboxd_username: null,
         letterboxd_profile_url: null,
         tvtime_username: null,

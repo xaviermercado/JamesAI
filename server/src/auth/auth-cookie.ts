@@ -10,7 +10,7 @@ export function resolveSameSite(config: AppConfig): CookieOptions['sameSite'] {
     return config.authCookieSameSite;
   }
 
-  return config.nodeEnv === 'production' ? 'none' : 'lax';
+  return 'lax';
 }
 
 function resolveSecure(config: AppConfig): boolean {

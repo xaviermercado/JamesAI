@@ -1,22 +1,39 @@
-import { useWindowDimensions, StyleSheet, View } from 'react-native';
+import { useWindowDimensions, Pressable, StyleSheet, View } from 'react-native';
 
 import { FeedbackActions } from '@/components/feedback-actions';
 import { MoviePoster } from '@/components/movie-poster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, Radii, Spacing } from '@/constants/theme';
+import type { LibraryAction, LibraryStatus } from '@/types/library';
 import type { MovieRecommendation } from '@/types/recommendations';
 
 type RecommendationCardProps = {
   recommendation: MovieRecommendation;
-  selectedAction?: string;
+  selectedAction?: 'like' | 'dislike' | 'watched';
   onAction: (action: 'like' | 'dislike' | 'watched', recommendation: MovieRecommendation) => void;
+  onRemoveFeedback?: (recommendation: MovieRecommendation) => void;
+  libraryStatus?: LibraryStatus | null;
+  onLibraryAction?: (action: LibraryAction, recommendation: MovieRecommendation) => void;
+  librarySubmitting?: boolean;
+  libraryErrorMessage?: string | null;
+  feedbackDisabled?: boolean;
+  feedbackSubmitting?: boolean;
+  feedbackErrorMessage?: string | null;
 };
 
 export function RecommendationCard({
   recommendation,
   selectedAction,
   onAction,
+  onRemoveFeedback,
+  libraryStatus,
+  onLibraryAction,
+  librarySubmitting,
+  libraryErrorMessage,
+  feedbackDisabled,
+  feedbackSubmitting,
+  feedbackErrorMessage,
 }: RecommendationCardProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
@@ -71,7 +88,88 @@ export function RecommendationCard({
           ))}
         </View>
 
-        <FeedbackActions selectedAction={selectedAction} onAction={(action) => onAction(action, recommendation)} />
+        {onLibraryAction ? (
+          <View style={styles.librarySection}>
+            <ThemedText type="smallBold" style={styles.libraryLabel}>Personal library</ThemedText>
+
+            <View style={styles.libraryActionRow}>
+              {libraryStatus === 'watchlist' ? (
+                <>
+                  <View style={[styles.libraryChip, styles.libraryChipActive]}>
+                    <ThemedText style={styles.libraryChipText}>In watchlist</ThemedText>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.libraryButton}
+                    onPress={() => onLibraryAction('mark_watched', recommendation)}
+                  >
+                    <ThemedText style={styles.libraryButtonText}>Mark watched</ThemedText>
+                  </Pressable>
+                </>
+              ) : null}
+
+              {libraryStatus === 'watched' ? (
+                <>
+                  <View style={[styles.libraryChip, styles.libraryChipActiveWatched]}>
+                    <ThemedText style={styles.libraryChipText}>Watched</ThemedText>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.libraryButton}
+                    onPress={() => onLibraryAction('mark_unwatched', recommendation)}
+                  >
+                    <ThemedText style={styles.libraryButtonText}>Move to watchlist</ThemedText>
+                  </Pressable>
+                </>
+              ) : null}
+
+              {!libraryStatus ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.libraryButton}
+                    onPress={() => onLibraryAction('add_watchlist', recommendation)}
+                  >
+                    <ThemedText style={styles.libraryButtonText}>Save to watchlist</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.libraryButton}
+                    onPress={() => onLibraryAction('mark_watched', recommendation)}
+                  >
+                    <ThemedText style={styles.libraryButtonText}>Mark watched</ThemedText>
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+
+            {libraryStatus ? (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.libraryRemoveButton}
+                onPress={() => onLibraryAction('remove', recommendation)}
+              >
+                <ThemedText style={styles.libraryRemoveText}>Remove from library</ThemedText>
+              </Pressable>
+            ) : null}
+
+            {librarySubmitting ? (
+              <ThemedText themeColor="textSecondary" style={styles.libraryHint}>Saving library state...</ThemedText>
+            ) : null}
+            {libraryErrorMessage ? (
+              <ThemedText style={styles.libraryError}>{libraryErrorMessage}</ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+
+        <FeedbackActions
+          selectedAction={selectedAction}
+          onAction={(action) => onAction(action, recommendation)}
+          onRemove={onRemoveFeedback ? () => onRemoveFeedback(recommendation) : undefined}
+          disabled={feedbackDisabled}
+          submitting={feedbackSubmitting}
+          errorMessage={feedbackErrorMessage}
+        />
       </View>
     </ThemedView>
   );
@@ -156,5 +254,65 @@ const styles = StyleSheet.create({
   providerText: {
     fontSize: 12,
     color: BrandColors.midnight800,
+  },
+  librarySection: {
+    gap: Spacing.one,
+  },
+  libraryLabel: {
+    color: BrandColors.midnight900,
+  },
+  libraryActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.one,
+  },
+  libraryChip: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    backgroundColor: '#eef3ff',
+  },
+  libraryChipActive: {
+    backgroundColor: '#dbeafe',
+  },
+  libraryChipActiveWatched: {
+    backgroundColor: '#dcfce7',
+  },
+  libraryChipText: {
+    color: BrandColors.midnight800,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  libraryButton: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderWidth: 1,
+    borderColor: BrandColors.border,
+    backgroundColor: '#ffffff',
+  },
+  libraryButtonText: {
+    color: BrandColors.midnight900,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  libraryRemoveButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    backgroundColor: '#fee2e2',
+  },
+  libraryRemoveText: {
+    color: '#b42318',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  libraryHint: {
+    fontSize: 12,
+  },
+  libraryError: {
+    color: '#b42318',
+    fontSize: 12,
   },
 });

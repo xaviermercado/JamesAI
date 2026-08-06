@@ -1,11 +1,14 @@
 import { Link, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppFooter } from '@/components/app-footer';
 import { AppHeader } from '@/components/app-header';
 import { useAuthSession } from '@/components/auth-session-provider';
+import { getScoutyAvatarAsset } from '@/constants/scouty-avatar-assets';
+import { resolveAvatarId, SCOUTY_DEFAULT_AVATAR_ID } from '@/constants/scouty-avatar-catalog';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
@@ -29,6 +32,7 @@ export default function ProfileSummaryScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -98,7 +102,17 @@ export default function ProfileSummaryScreen() {
 
           {/* Account info */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
-            {profile?.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} /> : null}
+            <Image
+              source={getScoutyAvatarAsset(
+                avatarFailed
+                  ? SCOUTY_DEFAULT_AVATAR_ID
+                  : resolveAvatarId(profile?.avatarId),
+              )}
+              style={styles.avatar}
+              contentFit="contain"
+              onError={() => setAvatarFailed(true)}
+              accessibilityLabel="Scouty profile avatar"
+            />
             <ThemedText type="smallBold">{profileName}</ThemedText>
             {profile?.displayName && profile.displayName !== profileName ? (
               <ThemedText themeColor="textSecondary">Display name: {profile.displayName}</ThemedText>
@@ -148,9 +162,14 @@ export default function ProfileSummaryScreen() {
           {/* Actions */}
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
             <View style={styles.buttonRow}>
-              <Link href={'/profile/edit' as never} asChild>
+              <Link href={'/profile/library' as never} asChild>
                 <Pressable style={styles.primaryButton}>
-                  <ThemedText style={styles.primaryButtonText}>Edit profile</ThemedText>
+                  <ThemedText style={styles.primaryButtonText}>Open library</ThemedText>
+                </Pressable>
+              </Link>
+              <Link href={'/profile/edit' as never} asChild>
+                <Pressable style={styles.secondaryButton}>
+                  <ThemedText style={styles.secondaryButtonText}>Edit profile</ThemedText>
                 </Pressable>
               </Link>
               <Link href={'/profile/preferences' as never} asChild>
@@ -206,7 +225,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#ffffff', fontWeight: '700' },
   secondaryButton: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, backgroundColor: '#eef3ff' },
   secondaryButtonText: { color: '#334155', fontWeight: '600' },
-  avatar: { width: 88, height: 88, borderRadius: 44 },
+  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#f8fafc' },
   emptyState: { fontStyle: 'italic' },
   errorText: { color: '#b42318' },
 });

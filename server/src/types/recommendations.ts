@@ -38,6 +38,7 @@ export interface MovieCandidate {
   providers: string[];
   country: string;
   mediaType: MediaType;
+  originalLanguage?: string;
 }
 
 export interface MovieRecommendation extends MovieCandidate {
@@ -49,6 +50,8 @@ export interface RecommendationResponse {
   source: 'mock' | 'live';
   /** Whether any saved profile preferences were applied to this request. */
   preferencesApplied: boolean;
+  /** Whether learned signals from explicit feedback were applied to ranking. */
+  feedbackPersonalizationApplied?: boolean;
   /** Concise context for the frontend. Safe to display. */
   preferenceContext?: {
     market?: string;

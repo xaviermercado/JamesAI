@@ -6,8 +6,12 @@ import { ThemedText } from '@/components/themed-text';
 type FeedbackAction = 'like' | 'dislike' | 'watched';
 
 interface FeedbackActionsProps {
-  selectedAction?: string;
+  selectedAction?: FeedbackAction;
   onAction: (action: FeedbackAction) => void;
+  onRemove?: () => void;
+  disabled?: boolean;
+  submitting?: boolean;
+  errorMessage?: string | null;
 }
 
 const actions: { value: FeedbackAction; label: string; icon: string }[] = [
@@ -16,32 +20,80 @@ const actions: { value: FeedbackAction; label: string; icon: string }[] = [
   { value: 'watched', label: 'Watched', icon: '✓' },
 ];
 
-export function FeedbackActions({ selectedAction, onAction }: FeedbackActionsProps) {
+export function FeedbackActions({
+  selectedAction,
+  onAction,
+  onRemove,
+  disabled,
+  submitting,
+  errorMessage,
+}: FeedbackActionsProps) {
   return (
-    <View style={styles.row}>
-      {actions.map((action) => {
-        const active = selectedAction === action.value;
-        return (
+    <View style={styles.wrapper}>
+      <View style={styles.row}>
+        {actions.map((action) => {
+          const active = selectedAction === action.value;
+          return (
+            <Pressable
+              key={action.value}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+              accessibilityState={{ selected: active, disabled: Boolean(disabled || submitting) }}
+              style={({ hovered, pressed }) => [
+                styles.button,
+                active && styles.buttonActive,
+                hovered && !active && styles.buttonHover,
+                pressed && styles.buttonPressed,
+                (disabled || submitting) && styles.buttonDisabled,
+              ]}
+              onPress={() => onAction(action.value)}
+              disabled={disabled || submitting}
+            >
+              <ThemedText style={[styles.buttonText, active && styles.buttonTextActive]}>
+                {`${action.icon} ${action.label}${active ? ' (selected)' : ''}`}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+
+        {onRemove ? (
           <Pressable
-            key={action.value}
             accessibilityRole="button"
-            accessibilityLabel={action.label}
+            accessibilityLabel="Remove feedback"
+            accessibilityState={{ disabled: Boolean(disabled || submitting) }}
             style={({ hovered, pressed }) => [
               styles.button,
-              active && styles.buttonActive,
-              hovered && !active && styles.buttonHover,
+              styles.removeButton,
+              hovered && styles.buttonHover,
               pressed && styles.buttonPressed,
+              (disabled || submitting) && styles.buttonDisabled,
             ]}
-            onPress={() => onAction(action.value)}>
-            <ThemedText style={[styles.buttonText, active && styles.buttonTextActive]}>{`${action.icon} ${action.label}`}</ThemedText>
+            onPress={onRemove}
+            disabled={disabled || submitting}
+          >
+            <ThemedText style={styles.removeButtonText}>Remove feedback</ThemedText>
           </Pressable>
-        );
-      })}
+        ) : null}
+      </View>
+
+      {submitting ? (
+        <ThemedText themeColor="textSecondary" accessibilityLiveRegion="polite" style={styles.statusText}>
+          Saving feedback...
+        </ThemedText>
+      ) : null}
+      {errorMessage ? (
+        <ThemedText accessibilityLiveRegion="polite" style={styles.errorText}>
+          {errorMessage}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    gap: Spacing.one,
+  },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -67,6 +119,9 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.88,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: BrandColors.midnight800,
     fontSize: 14,
@@ -74,5 +129,21 @@ const styles = StyleSheet.create({
   },
   buttonTextActive: {
     color: BrandColors.scoutyBlue,
+  },
+  removeButton: {
+    backgroundColor: '#fff5f5',
+    borderColor: '#f3c1bf',
+  },
+  removeButtonText: {
+    color: '#b42318',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusText: {
+    fontSize: 13,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#b42318',
   },
 });

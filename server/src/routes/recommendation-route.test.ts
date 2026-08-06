@@ -13,6 +13,7 @@ import type {
   StoredSession,
   StoredUser,
 } from '../auth/auth-repository';
+import type { LibraryRepositoryLike, ListLibraryInput, StoredLibraryTitle } from '../library/library-repository';
 import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from '../profile/profile-repository';
 import { createRecommendationsRouter } from '../routes/recommendations';
 import type { TmdbService } from '../services/tmdb-service';
@@ -36,11 +37,24 @@ function createConfig(): AppConfig {
 
 class StubTmdbService {
   lastRequest: unknown = null;
+  nextRecommendations: Array<{
+    tmdbMovieId: number;
+    title: string;
+    posterUrl: string;
+    releaseYear: number;
+    runtimeMinutes: number;
+    tmdbRating: number;
+    genres: string[];
+    providers: string[];
+    country: string;
+    mediaType: 'movie' | 'tv';
+    explanation: string;
+  }> = [];
 
   async getRecommendations(req: unknown) {
     this.lastRequest = req;
     return {
-      recommendations: [],
+      recommendations: this.nextRecommendations,
       source: 'live' as const,
       preferencesApplied: false,
     };
@@ -94,19 +108,63 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
 
 class InMemoryProfileRepository implements ProfileRepositoryLike {
   profiles = new Map<string, StoredProfile>();
-  services: Array<{ providerId: number; providerName: string }> = [];
+  services: Array<{ providerId: number; providerName: string; sortOrder: number }> = [];
   languages: ContentLanguageSelection[] = [];
 
   async findByUserId(userId: string) { return this.profiles.get(userId) ?? null; }
   async upsert(userId: string, input: UpsertProfileInput): Promise<StoredProfile> {
-    const p: StoredProfile = { user_id: userId, first_name: input.firstName, last_name: input.lastName, display_name: input.displayName, country_code: input.countryCode, viewing_format_preference: null, avatar_url: input.avatarUrl, letterboxd_username: input.letterboxdUsername, letterboxd_profile_url: input.letterboxdProfileUrl, tvtime_username: input.tvtimeUsername, tvtime_profile_url: input.tvtimeProfileUrl };
+    const p: StoredProfile = { user_id: userId, first_name: input.firstName, last_name: input.lastName, display_name: input.displayName, country_code: input.countryCode, viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, avatar_id: input.avatarId ?? null, letterboxd_username: input.letterboxdUsername, letterboxd_profile_url: input.letterboxdProfileUrl, tvtime_username: input.tvtimeUsername, tvtime_profile_url: input.tvtimeProfileUrl };
     this.profiles.set(userId, p); return p;
   }
   async listStreamingServices(_userId: string) { return this.services; }
-  async replaceStreamingServices(_u: string, _c: string, s: Array<{ providerId: number; providerName: string }>) { this.services = s; return s; }
+  async replaceStreamingServices(_u: string, _c: string, s: Array<{ providerId: number; providerName: string; sortOrder: number }>) { this.services = s; return s; }
   async listContentLanguages(_userId: string) { return this.languages; }
   async replaceContentLanguages(_u: string, codes: string[]) { this.languages = codes.map((c, i) => ({ languageCode: c, sortOrder: i })); return this.languages; }
   async replacePreferences(_u: string, _input: ReplacePreferencesInput) {}
+}
+
+class InMemoryLibraryRepository implements LibraryRepositoryLike {
+  watchedByUser = new Map<string, number[]>();
+
+  async upsertWatchlist(_userId: string, _tmdbId: number, _mediaType: 'movie' | 'tv'): Promise<StoredLibraryTitle> {
+    throw new Error('not needed in this test');
+  }
+
+  async markWatched(_userId: string, _tmdbId: number, _mediaType: 'movie' | 'tv'): Promise<StoredLibraryTitle> {
+    throw new Error('not needed in this test');
+  }
+
+  async markUnwatched(_userId: string, _tmdbId: number, _mediaType: 'movie' | 'tv'): Promise<StoredLibraryTitle> {
+    throw new Error('not needed in this test');
+  }
+
+  async removeTitle(_userId: string, _tmdbId: number, _mediaType: 'movie' | 'tv'): Promise<boolean> {
+    return false;
+  }
+
+  async getTitle(_userId: string, _tmdbId: number, _mediaType: 'movie' | 'tv'): Promise<StoredLibraryTitle | null> {
+    return null;
+  }
+
+  async listLibrary(_userId: string, _input: ListLibraryInput): Promise<{ rows: StoredLibraryTitle[]; total: number }> {
+    return { rows: [], total: 0 };
+  }
+
+  async listStates(_userId: string, _titles: Array<{ tmdbId: number; mediaType: 'movie' | 'tv' }>): Promise<StoredLibraryTitle[]> {
+    return [];
+  }
+
+  async listWatchedTitleIds(userId: string, _mediaType: 'movie' | 'tv', limit = 300): Promise<number[]> {
+    return (this.watchedByUser.get(userId) ?? []).slice(0, limit);
+  }
+
+  async clearWatchlist(_userId: string): Promise<number> {
+    return 0;
+  }
+
+  async clearWatched(_userId: string): Promise<number> {
+    return 0;
+  }
 }
 
 function createAuthenticatedSession(authRepo: InMemoryAuthRepository, config: AppConfig, userId = '11111111-1111-4111-8111-111111111111') {
@@ -121,6 +179,7 @@ function createAuthenticatedSession(authRepo: InMemoryAuthRepository, config: Ap
 describe('recommendations route', () => {
   let authRepo: InMemoryAuthRepository;
   let profileRepo: InMemoryProfileRepository;
+  let libraryRepo: InMemoryLibraryRepository;
   let tmdb: StubTmdbService;
   let app: express.Express;
   const config = createConfig();
@@ -128,10 +187,11 @@ describe('recommendations route', () => {
   beforeEach(() => {
     authRepo = new InMemoryAuthRepository();
     profileRepo = new InMemoryProfileRepository();
+    libraryRepo = new InMemoryLibraryRepository();
     tmdb = new StubTmdbService();
     app = express();
     app.use(express.json());
-    app.use('/api', createRecommendationsRouter(tmdb as unknown as TmdbService, config, authRepo, profileRepo));
+    app.use('/api', createRecommendationsRouter(tmdb as unknown as TmdbService, config, authRepo, profileRepo, null, libraryRepo));
   });
 
   it('returns 400 for empty description', async () => {
@@ -170,8 +230,8 @@ describe('recommendations route', () => {
 
   it('authenticated request with saved preferences applies them', async () => {
     const session = createAuthenticatedSession(authRepo, config);
-    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'Test', country_code: 'GB', viewing_format_preference: null, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
-    profileRepo.services = [{ providerId: 8, providerName: 'Netflix' }];
+    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'Test', country_code: 'GB', viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
+    profileRepo.services = [{ providerId: 8, providerName: 'Netflix', sortOrder: 0 }];
     profileRepo.languages = [{ languageCode: 'fr', sortOrder: 0 }];
 
     const res = await request(app).post('/api/recommendations').set('Cookie', session.cookie).send({ description: 'drama' });
@@ -187,7 +247,7 @@ describe('recommendations route', () => {
 
   it('temporary country override replaces saved market', async () => {
     const session = createAuthenticatedSession(authRepo, config);
-    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'T', country_code: 'GB', viewing_format_preference: null, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
+    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'T', country_code: 'GB', viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
 
     await request(app).post('/api/recommendations').set('Cookie', session.cookie).send({ description: 'drama', country: 'FR' });
     const req = tmdb.lastRequest as Record<string, unknown>;
@@ -196,7 +256,7 @@ describe('recommendations route', () => {
 
   it('temporary providerIds override saved providers', async () => {
     const session = createAuthenticatedSession(authRepo, config);
-    profileRepo.services = [{ providerId: 8, providerName: 'Netflix' }];
+    profileRepo.services = [{ providerId: 8, providerName: 'Netflix', sortOrder: 0 }];
 
     await request(app).post('/api/recommendations').set('Cookie', session.cookie).send({ description: 'drama', providerIds: [337] });
     const req = tmdb.lastRequest as Record<string, unknown>;
@@ -205,7 +265,7 @@ describe('recommendations route', () => {
 
   it('empty providerIds clears provider filter regardless of saved preferences', async () => {
     const session = createAuthenticatedSession(authRepo, config);
-    profileRepo.services = [{ providerId: 8, providerName: 'Netflix' }];
+    profileRepo.services = [{ providerId: 8, providerName: 'Netflix', sortOrder: 0 }];
 
     await request(app).post('/api/recommendations').set('Cookie', session.cookie).send({ description: 'drama', providerIds: [] });
     const req = tmdb.lastRequest as Record<string, unknown>;
@@ -231,8 +291,8 @@ describe('recommendations route', () => {
 
   it('temporary overrides do not mutate saved preferences', async () => {
     const session = createAuthenticatedSession(authRepo, config);
-    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'T', country_code: 'CA', viewing_format_preference: null, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
-    profileRepo.services = [{ providerId: 230, providerName: 'Crave' }];
+    profileRepo.profiles.set(session.userId, { user_id: session.userId, first_name: null, last_name: null, display_name: 'T', country_code: 'CA', viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
+    profileRepo.services = [{ providerId: 230, providerName: 'Crave', sortOrder: 0 }];
     profileRepo.languages = [{ languageCode: 'en', sortOrder: 0 }];
 
     // Send with temporary overrides
@@ -240,7 +300,7 @@ describe('recommendations route', () => {
 
     // Verify profile unchanged
     expect(profileRepo.profiles.get(session.userId)?.country_code).toBe('CA');
-    expect(profileRepo.services).toEqual([{ providerId: 230, providerName: 'Crave' }]);
+    expect(profileRepo.services).toEqual([{ providerId: 230, providerName: 'Crave', sortOrder: 0 }]);
     expect(profileRepo.languages).toEqual([{ languageCode: 'en', sortOrder: 0 }]);
   });
 
@@ -261,8 +321,8 @@ describe('recommendations route', () => {
     const cookieB = `${AUTH_SESSION_COOKIE_NAME}=${encodeURIComponent(token2)}`;
 
     // User A has saved preferences
-    profileRepo.profiles.set(sessionA.userId, { user_id: sessionA.userId, first_name: null, last_name: null, display_name: 'A', country_code: 'CA', viewing_format_preference: null, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
-    profileRepo.services = [{ providerId: 230, providerName: 'Crave' }];
+    profileRepo.profiles.set(sessionA.userId, { user_id: sessionA.userId, first_name: null, last_name: null, display_name: 'A', country_code: 'CA', viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, letterboxd_username: null, letterboxd_profile_url: null, tvtime_username: null, tvtime_profile_url: null });
+    profileRepo.services = [{ providerId: 230, providerName: 'Crave', sortOrder: 0 }];
 
     // User B uses their own session — should NOT see user A's providers
     // (In this test, profileRepo.listStreamingServices ignores userId, so this is a design concern;
@@ -273,5 +333,121 @@ describe('recommendations route', () => {
     // Both requests succeed
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
+  });
+
+  it('uses saved provider order as a soft priority tie-breaker', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    profileRepo.services = [
+      { providerId: 8, providerName: 'Netflix', sortOrder: 0 },
+      { providerId: 9, providerName: 'Prime Video', sortOrder: 1 },
+    ];
+
+    tmdb.nextRecommendations = [
+      {
+        tmdbMovieId: 1,
+        title: 'Prime-first candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Prime Video'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'x',
+      },
+      {
+        tmdbMovieId: 2,
+        title: 'Netflix candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Netflix'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'y',
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'drama' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recommendations[0].tmdbMovieId).toBe(2);
+  });
+
+  it('does not apply saved provider ordering when temporary provider filter is provided', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    profileRepo.services = [
+      { providerId: 8, providerName: 'Netflix', sortOrder: 0 },
+      { providerId: 9, providerName: 'Prime Video', sortOrder: 1 },
+    ];
+
+    tmdb.nextRecommendations = [
+      {
+        tmdbMovieId: 1,
+        title: 'Prime-first candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Prime Video'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'x',
+      },
+      {
+        tmdbMovieId: 2,
+        title: 'Netflix candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Netflix'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'y',
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'drama', providerIds: [337] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recommendations[0].tmdbMovieId).toBe(1);
+  });
+
+  it('suppresses watched titles by default for authenticated users', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    libraryRepo.watchedByUser.set(session.userId, [42, 99]);
+
+    await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'light comedy', excludedMovieIds: [5] });
+
+    const req = tmdb.lastRequest as Record<string, unknown>;
+    expect(req.excludedMovieIds).toEqual([5, 42, 99]);
+  });
+
+  it('allows explicit rewatch intent without watched-title suppression', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    libraryRepo.watchedByUser.set(session.userId, [42, 99]);
+
+    await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'I want to rewatch something cozy', excludedMovieIds: [5] });
+
+    const req = tmdb.lastRequest as Record<string, unknown>;
+    expect(req.excludedMovieIds).toEqual([5]);
   });
 });

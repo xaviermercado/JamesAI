@@ -64,3 +64,16 @@ export async function updateMyPreferences(input: UpdatePreferencesInput, csrfTok
 export async function getPreferenceReferenceData(): Promise<PreferencesCatalog> {
   return requestJson<PreferencesCatalog>('/api/profile/reference', { method: 'GET' });
 }
+
+export async function getProviderCatalogForCountry(countryCode: string): Promise<{
+  marketCode: string;
+  availabilityKnown: boolean;
+  providers: StreamingServiceCatalogItem[];
+}> {
+  const query = new URLSearchParams({ country: countryCode.trim().toUpperCase() });
+  return requestJson<{
+    marketCode: string;
+    availabilityKnown: boolean;
+    providers: StreamingServiceCatalogItem[];
+  }>(`/api/profile/providers?${query.toString()}`, { method: 'GET' });
+}

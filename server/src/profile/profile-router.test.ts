@@ -14,6 +14,7 @@ import type {
   StoredUser,
 } from '../auth/auth-repository';
 import { createProfileRouter } from './profile-router';
+import { scoutyAvatarCatalog } from './avatar-catalog';
 import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from './profile-repository';
 
 class InMemoryAuthRepository implements AuthRepositoryLike {
@@ -122,7 +123,7 @@ class InMemoryAuthRepository implements AuthRepositoryLike {
 
 class InMemoryProfileRepository implements ProfileRepositoryLike {
   profiles = new Map<string, StoredProfile>();
-  streamingServices = new Map<string, Array<{ providerId: number; providerName: string }>>();
+  streamingServices = new Map<string, Array<{ providerId: number; providerName: string; sortOrder: number }>>();
   contentLanguages = new Map<string, ContentLanguageSelection[]>();
 
   async findByUserId(userId: string): Promise<StoredProfile | null> {
@@ -137,7 +138,9 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
       display_name: input.displayName,
       country_code: input.countryCode,
       viewing_format_preference: input.viewingFormatPreference ?? null,
-      avatar_url: input.avatarUrl,
+      personalization_enabled: 1,
+      avatar_url: null,
+      avatar_id: input.avatarId ?? null,
       letterboxd_username: input.letterboxdUsername,
       letterboxd_profile_url: input.letterboxdProfileUrl,
       tvtime_username: input.tvtimeUsername,
@@ -147,13 +150,14 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
     return profile;
   }
 
-  async listStreamingServices(userId: string): Promise<Array<{ providerId: number; providerName: string }>> {
+  async listStreamingServices(userId: string): Promise<Array<{ providerId: number; providerName: string; sortOrder: number }>> {
     return this.streamingServices.get(userId) ?? [];
   }
 
-  async replaceStreamingServices(userId: string, _countryCode: string, services: Array<{ providerId: number; providerName: string }>): Promise<Array<{ providerId: number; providerName: string }>> {
-    this.streamingServices.set(userId, services);
-    return services;
+  async replaceStreamingServices(userId: string, _countryCode: string, services: Array<{ providerId: number; providerName: string; sortOrder: number }>): Promise<Array<{ providerId: number; providerName: string; sortOrder: number }>> {
+    const normalized = services.map((service, index) => ({ ...service, sortOrder: index }));
+    this.streamingServices.set(userId, normalized);
+    return normalized;
   }
 
   async listContentLanguages(userId: string): Promise<ContentLanguageSelection[]> {
@@ -171,8 +175,11 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
     if (existing) {
       existing.country_code = input.marketCode;
       existing.viewing_format_preference = input.viewingFormatPreference;
+      if (typeof input.personalizationEnabled === 'boolean') {
+        existing.personalization_enabled = input.personalizationEnabled ? 1 : 0;
+      }
     }
-    this.streamingServices.set(userId, input.services);
+    this.streamingServices.set(userId, input.services.map((service, index) => ({ ...service, sortOrder: index })));
     const selections = input.languageCodes.map((code, index) => ({ languageCode: code, sortOrder: index }));
     this.contentLanguages.set(userId, selections);
   }
@@ -269,6 +276,31 @@ describe('profile router', () => {
     expect(response.status).toBe(403);
   });
 
+  it('rejects unauthenticated profile mutation', async () => {
+    const response = await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .send({ firstName: 'James', lastName: 'Narvey', displayName: 'James', countryCode: 'US', avatarId: 'smiling' });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('sets private cache for authenticated profile state but not public reference', async () => {
+    const session = createAuthenticatedSession(authRepo, createConfig());
+
+    const profileResponse = await request(app)
+      .get('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie);
+
+    const referenceResponse = await request(app)
+      .get('/api/profile/reference')
+      .set('Origin', 'https://app.example.com');
+
+    expect(profileResponse.headers['cache-control']).toBe('private, no-store');
+    expect(referenceResponse.headers['cache-control']).toBeUndefined();
+  });
+
   it('upserts profile and returns normalized payload', async () => {
     const config = createConfig();
     const session = createAuthenticatedSession(authRepo, config);
@@ -278,7 +310,7 @@ describe('profile router', () => {
       .set('Origin', 'https://app.example.com')
       .set('Cookie', session.cookie)
       .set('X-CSRF-Token', session.csrfToken)
-      .send({ firstName: 'James', lastName: 'Narvey', displayName: 'James AI', countryCode: 'us', avatarUrl: 'https://example.com/avatar.png', letterboxdUsername: 'jamesletter' });
+      .send({ firstName: 'James', lastName: 'Narvey', displayName: 'James AI', countryCode: 'us', avatarId: 'heart', letterboxdUsername: 'jamesletter' });
 
     expect(patchResponse.status).toBe(200);
     expect(patchResponse.body.profile.firstName).toBe('James');
@@ -287,7 +319,169 @@ describe('profile router', () => {
     const getResponse = await request(app).get('/api/profile').set('Origin', 'https://app.example.com').set('Cookie', session.cookie);
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.profile.displayName).toBe('James AI');
+    expect(getResponse.body.profile.avatarId).toBe('heart');
     expect(getResponse.body.profile.tvtimeUsername).toBeNull();
+  });
+
+  it('uses default avatar when profile avatar_id is missing or invalid', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    profileRepo.profiles.set(session.userId, {
+      user_id: session.userId,
+      first_name: 'Fallback',
+      last_name: 'User',
+      display_name: 'Fallback User',
+      country_code: 'US',
+      viewing_format_preference: null,
+      personalization_enabled: 1,
+      avatar_url: null,
+      avatar_id: 'unknown-legacy-avatar',
+      letterboxd_username: null,
+      letterboxd_profile_url: null,
+      tvtime_username: null,
+      tvtime_profile_url: null,
+    });
+
+    const response = await request(app)
+      .get('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.profile.avatarId).toBe('smiling');
+  });
+
+  it('rejects unknown avatar IDs and unsupported profile payload fields', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const invalidAvatarResponse = await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        firstName: 'James',
+        lastName: 'Narvey',
+        displayName: 'James AI',
+        countryCode: 'US',
+        avatarId: 'not-supported',
+      });
+
+    expect(invalidAvatarResponse.status).toBe(400);
+
+    const unsupportedFieldResponse = await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        firstName: 'James',
+        lastName: 'Narvey',
+        displayName: 'James AI',
+        countryCode: 'US',
+        avatarId: 'smiling',
+        userId: 'malicious-input',
+      });
+
+    expect(unsupportedFieldResponse.status).toBe(400);
+  });
+
+  it('rejects malformed and oversized avatar payload values', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const invalidValues: unknown[] = [
+      ['smiling'],
+      { id: 'smiling' },
+      88,
+      true,
+      'x'.repeat(120),
+    ];
+
+    for (const value of invalidValues) {
+      const response = await request(app)
+        .patch('/api/profile')
+        .set('Origin', 'https://app.example.com')
+        .set('Cookie', session.cookie)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send({
+          firstName: 'James',
+          lastName: 'Narvey',
+          displayName: 'James AI',
+          countryCode: 'US',
+          avatarId: value,
+        });
+
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('supports idempotent duplicate avatar saves and persists across sessions', async () => {
+    const config = createConfig();
+    const sessionA = createAuthenticatedSession(authRepo, config);
+
+    const payload = {
+      firstName: 'James',
+      lastName: 'Narvey',
+      displayName: 'James AI',
+      countryCode: 'US',
+      avatarId: 'checkmark',
+    };
+
+    const firstSave = await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', sessionA.cookie)
+      .set('X-CSRF-Token', sessionA.csrfToken)
+      .send(payload);
+
+    const secondSave = await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', sessionA.cookie)
+      .set('X-CSRF-Token', sessionA.csrfToken)
+      .send(payload);
+
+    expect(firstSave.status).toBe(200);
+    expect(secondSave.status).toBe(200);
+    expect(firstSave.body.profile.avatarId).toBe('checkmark');
+    expect(secondSave.body.profile.avatarId).toBe('checkmark');
+
+    authRepo.sessions.clear();
+    const sessionB = createAuthenticatedSession(authRepo, config);
+
+    const reload = await request(app)
+      .get('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', sessionB.cookie);
+
+    expect(reload.status).toBe(200);
+    expect(reload.body.profile.avatarId).toBe('checkmark');
+  });
+
+  it('accepts each valid avatar ID', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    for (const avatar of scoutyAvatarCatalog) {
+      const response = await request(app)
+        .patch('/api/profile')
+        .set('Origin', 'https://app.example.com')
+        .set('Cookie', session.cookie)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send({
+          firstName: 'James',
+          lastName: 'Narvey',
+          displayName: 'James AI',
+          countryCode: 'US',
+          avatarId: avatar.id,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.profile.avatarId).toBe(avatar.id);
+    }
   });
 
   it('loads and updates streaming services', async () => {
@@ -303,13 +497,31 @@ describe('profile router', () => {
 
     expect(patchResponse.status).toBe(200);
     expect(patchResponse.body.services).toEqual([
-      { providerId: 8, providerName: 'Netflix' },
-      { providerId: 9, providerName: 'Prime Video' },
+      { providerId: 8, providerName: 'Netflix', sortOrder: 0 },
+      { providerId: 9, providerName: 'Prime Video', sortOrder: 1 },
     ]);
 
     const getResponse = await request(app).get('/api/profile/streaming-services').set('Origin', 'https://app.example.com').set('Cookie', session.cookie);
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.catalog.length).toBeGreaterThan(0);
+  });
+
+  it('preserves provider order in saved streaming preferences', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const patchResponse = await request(app)
+      .patch('/api/profile/streaming-services')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ providerIds: [9, 8] });
+
+    expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.services).toEqual([
+      { providerId: 9, providerName: 'Prime Video', sortOrder: 0 },
+      { providerId: 8, providerName: 'Netflix', sortOrder: 1 },
+    ]);
   });
 
   it('saves and retrieves content language preferences', async () => {
@@ -408,7 +620,9 @@ describe('profile router', () => {
       display_name: 'Test User',
       country_code: 'US',
       viewing_format_preference: null,
+      personalization_enabled: 1,
       avatar_url: null,
+      avatar_id: null,
       letterboxd_username: null,
       letterboxd_profile_url: null,
       tvtime_username: null,
@@ -425,6 +639,7 @@ describe('profile router', () => {
         providerIds: [8, 337],
         languageCodes: ['en', 'fr'],
         viewingFormatPreference: 'subtitles_ok',
+        personalizationEnabled: false,
       });
 
     expect(patchResponse.status).toBe(200);
@@ -432,6 +647,8 @@ describe('profile router', () => {
     expect(patchResponse.body.streamingServices).toHaveLength(2);
     expect(patchResponse.body.contentLanguages).toHaveLength(2);
     expect(patchResponse.body.viewingFormatPreference).toBe('subtitles_ok');
+    expect(patchResponse.body.personalizationEnabled).toBe(false);
+    expect(patchResponse.body.countryProviderCompatibility).toBeDefined();
   });
 
   it('rejects unsupported market codes in preferences', async () => {
@@ -462,14 +679,135 @@ describe('profile router', () => {
     expect(response.status).toBe(400);
   });
 
+  it('rejects provider arrays above max selection limit', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        marketCode: 'US',
+        providerIds: [8, 9, 337, 2, 1899, 531, 15, 386, 230, 73, 1773],
+        languageCodes: [],
+        viewingFormatPreference: null,
+      });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects unsupported fields in preferences payload', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        marketCode: 'US',
+        providerIds: [8],
+        languageCodes: [],
+        viewingFormatPreference: null,
+        userId: 'malicious-input',
+      });
+
+    expect(response.status).toBe(400);
+  });
+
   it('returns reference data without authentication', async () => {
     const response = await request(app).get('/api/profile/reference').set('Origin', 'https://app.example.com');
     expect(response.status).toBe(200);
-    expect(response.body.countries.length).toBeGreaterThan(0);
+    expect(response.body.countries.length).toBeGreaterThan(200);
     expect(response.body.languages.length).toBeGreaterThan(0);
     expect(response.body.providers.length).toBeGreaterThan(0);
+    expect(response.body.avatars.length).toBe(12);
     expect(response.body.countries[0]).toHaveProperty('code');
     expect(response.body.countries[0]).toHaveProperty('name');
+  });
+
+  it('returns country-aware provider catalog metadata', async () => {
+    const response = await request(app)
+      .get('/api/profile/providers?country=CA')
+      .set('Origin', 'https://app.example.com');
+
+    expect(response.status).toBe(200);
+    expect(response.body.marketCode).toBe('CA');
+    expect(response.body.availabilityKnown).toBe(true);
+    expect(response.body.providers.some((provider: { providerName: string }) => provider.providerName === 'Crave')).toBe(true);
+  });
+
+  it('prevents silent incompatible-provider removal when changing market', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    profileRepo.profiles.set(session.userId, {
+      user_id: session.userId,
+      first_name: 'Test',
+      last_name: 'User',
+      display_name: 'Test User',
+      country_code: 'US',
+      viewing_format_preference: null,
+      personalization_enabled: 1,
+      avatar_url: null,
+      avatar_id: null,
+      letterboxd_username: null,
+      letterboxd_profile_url: null,
+      tvtime_username: null,
+      tvtime_profile_url: null,
+    });
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ marketCode: 'CA', providerIds: [15, 8], languageCodes: [], viewingFormatPreference: null });
+
+    expect(response.status).toBe(409);
+    expect(response.body.requiresConfirmation).toBe(true);
+    expect(response.body.incompatibleProviderIds).toContain(15);
+  });
+
+  it('removes incompatible providers only with explicit confirmation', async () => {
+    const config = createConfig();
+    const session = createAuthenticatedSession(authRepo, config);
+
+    profileRepo.profiles.set(session.userId, {
+      user_id: session.userId,
+      first_name: 'Test',
+      last_name: 'User',
+      display_name: 'Test User',
+      country_code: 'US',
+      viewing_format_preference: null,
+      personalization_enabled: 1,
+      avatar_url: null,
+      avatar_id: null,
+      letterboxd_username: null,
+      letterboxd_profile_url: null,
+      tvtime_username: null,
+      tvtime_profile_url: null,
+    });
+
+    const response = await request(app)
+      .patch('/api/profile/preferences')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({
+        marketCode: 'CA',
+        providerIds: [15, 8],
+        languageCodes: [],
+        viewingFormatPreference: null,
+        allowProviderPrune: true,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.streamingServices).toEqual([{ providerId: 8, providerName: 'Netflix', sortOrder: 0 }]);
+    expect(response.body.countryProviderCompatibility.removedProviderIds).toEqual([15]);
   });
 
   it('profile data is isolated between users', async () => {

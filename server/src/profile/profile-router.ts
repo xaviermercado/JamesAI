@@ -6,9 +6,15 @@ import { AuthService } from '../auth/auth-service';
 import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
+import { scoutyAvatarCatalog } from './avatar-catalog';
 import type { ProfileRepositoryLike } from './profile-repository';
 import { resolveServiceSelections, toApiProfile } from './profile-repository';
-import { countryCatalog, languageCatalog } from './reference-data';
+import {
+  countryCatalog,
+  findIncompatibleProvidersForCountry,
+  getCountryAwareProviderCatalog,
+  languageCatalog,
+} from './reference-data';
 import { logger } from '../utils/logger';
 
 function buildDisplayName(firstName: string, lastName: string, displayName: string | null | undefined): string {
@@ -77,11 +83,19 @@ function logProfileRouteError(route: string, req: Request, error: unknown): void
   });
 }
 
+function toProviderIdSet(items: Array<{ providerId: number }>): Set<number> {
+  return new Set(items.map((item) => item.providerId));
+}
+
 export function createProfileRouter(config: AppConfig, authRepository: AuthRepositoryLike, profileRepository: ProfileRepositoryLike) {
   const router = express.Router();
   const authService = new AuthService(authRepository, config);
 
   router.use((req, res, next) => {
+    if (req.path !== '/reference' && req.path !== '/providers') {
+      res.setHeader('Cache-Control', 'private, no-store');
+    }
+
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !isAllowedOrigin(req.headers.origin, config)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -91,7 +105,18 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
 
   // Public reference data: countries and language catalogs (no auth required).
   router.get('/reference', (_req, res) => {
-    return res.json({ countries: countryCatalog, languages: languageCatalog, providers: streamingServiceCatalog });
+    return res.json({
+      countries: countryCatalog,
+      languages: languageCatalog,
+      providers: streamingServiceCatalog,
+      avatars: scoutyAvatarCatalog,
+    });
+  });
+
+  router.get('/providers', async (req, res) => {
+    const country = typeof req.query.country === 'string' ? req.query.country.trim().toUpperCase() : 'US';
+    const catalog = getCountryAwareProviderCatalog(country);
+    return res.json(catalog);
   });
 
   router.get('/', async (req, res) => {
@@ -132,7 +157,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
 
       const parsed = updateProfileSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+        return res.status(400).json({ error: 'Invalid profile payload' });
       }
 
       const saved = await profileRepository.upsert(restored.identity.userId, {
@@ -141,7 +166,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         displayName: buildDisplayName(parsed.data.firstName, parsed.data.lastName, parsed.data.displayName),
         countryCode: parsed.data.countryCode,
         viewingFormatPreference: parsed.data.viewingFormatPreference ?? null,
-        avatarUrl: parsed.data.avatarUrl ?? null,
+        avatarId: parsed.data.avatarId ?? null,
         letterboxdUsername: parsed.data.letterboxdUsername ?? null,
         letterboxdProfileUrl: parsed.data.letterboxdProfileUrl ?? null,
         tvtimeUsername: parsed.data.tvtimeUsername ?? null,
@@ -283,16 +308,22 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         profileRepository.listContentLanguages(userId),
       ]);
 
+      const effectiveMarket = profile?.country_code ?? 'US';
+      const providerCatalog = getCountryAwareProviderCatalog(effectiveMarket);
+
       return res.json({
         marketCode: profile?.country_code ?? null,
         viewingFormatPreference: profile?.viewing_format_preference ?? null,
+        personalizationEnabled: profile ? profile.personalization_enabled !== 0 : true,
         streamingServices: services,
         contentLanguages: languages,
         catalog: {
-          providers: streamingServiceCatalog,
+          providers: providerCatalog.providers,
           countries: countryCatalog,
           languages: languageCatalog,
+          avatars: scoutyAvatarCatalog,
         },
+        providerCatalogAvailabilityKnown: providerCatalog.availabilityKnown,
       });
     } catch (error) {
       logProfileRouteError('/preferences', req, error);
@@ -322,11 +353,37 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       }
 
       const { userId } = restored.identity;
-      const serviceSelections = resolveServiceSelections(parsed.data.providerIds);
+
+      const existingServices = await profileRepository.listStreamingServices(userId);
+      const existingProviderIds = toProviderIdSet(existingServices);
+      const requestedProviderIds = [...parsed.data.providerIds];
+
+      const incompatibleRequested = findIncompatibleProvidersForCountry(parsed.data.marketCode, requestedProviderIds);
+      if (incompatibleRequested.length > 0 && !parsed.data.allowProviderPrune) {
+        return res.status(409).json({
+          error: 'Selected providers are unavailable in the selected country',
+          incompatibleProviderIds: incompatibleRequested,
+          requiresConfirmation: true,
+        });
+      }
+
+      const incompatibleExisting = findIncompatibleProvidersForCountry(
+        parsed.data.marketCode,
+        [...existingProviderIds],
+      );
+
+      let effectiveProviderIds = requestedProviderIds;
+      if (parsed.data.allowProviderPrune && incompatibleRequested.length > 0) {
+        const incompatibleSet = new Set(incompatibleRequested);
+        effectiveProviderIds = requestedProviderIds.filter((providerId) => !incompatibleSet.has(providerId));
+      }
+
+      const serviceSelections = resolveServiceSelections(effectiveProviderIds);
 
       await profileRepository.replacePreferences(userId, {
         marketCode: parsed.data.marketCode,
         viewingFormatPreference: parsed.data.viewingFormatPreference,
+        personalizationEnabled: parsed.data.personalizationEnabled,
         services: serviceSelections,
         languageCodes: parsed.data.languageCodes,
       });
@@ -340,8 +397,14 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       return res.json({
         marketCode: profile?.country_code ?? parsed.data.marketCode,
         viewingFormatPreference: profile?.viewing_format_preference ?? null,
+        personalizationEnabled: profile ? profile.personalization_enabled !== 0 : (parsed.data.personalizationEnabled ?? true),
         streamingServices: services,
         contentLanguages: languages,
+        countryProviderCompatibility: {
+          availabilityKnown: getCountryAwareProviderCatalog(parsed.data.marketCode).availabilityKnown,
+          removedProviderIds: parsed.data.allowProviderPrune ? incompatibleRequested : [],
+          incompatibleExistingProviderIds: incompatibleExisting,
+        },
       });
     } catch (error) {
       logProfileRouteError('/preferences', req, error);

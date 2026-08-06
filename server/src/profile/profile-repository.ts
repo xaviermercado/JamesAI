@@ -2,6 +2,7 @@ import type { Pool } from 'mysql2';
 
 import type { ViewingFormatPreference } from './profile-schemas';
 import { streamingServiceCatalog } from './reference-data';
+import { resolveStoredAvatarId, type ScoutyAvatarId } from './avatar-catalog';
 
 type PromisePool = ReturnType<Pool['promise']>;
 
@@ -12,7 +13,9 @@ export interface StoredProfile {
   display_name: string;
   country_code: string;
   viewing_format_preference: ViewingFormatPreference | null;
+  personalization_enabled: number;
   avatar_url: string | null;
+  avatar_id?: string | null;
   letterboxd_username: string | null;
   letterboxd_profile_url: string | null;
   tvtime_username: string | null;
@@ -25,7 +28,7 @@ export interface UpsertProfileInput {
   displayName: string;
   countryCode: string;
   viewingFormatPreference?: ViewingFormatPreference | null;
-  avatarUrl: string | null;
+  avatarId?: ScoutyAvatarId | null;
   letterboxdUsername: string | null;
   letterboxdProfileUrl: string | null;
   tvtimeUsername: string | null;
@@ -39,11 +42,13 @@ export interface StoredStreamingService {
   provider_name: string;
   logo_path: string | null;
   country_code: string;
+  sort_order: number;
 }
 
 export interface StreamingServiceSelection {
   providerId: number;
   providerName: string;
+  sortOrder: number;
 }
 
 export interface StoredContentLanguage {
@@ -61,6 +66,7 @@ export interface ContentLanguageSelection {
 export interface ReplacePreferencesInput {
   marketCode: string;
   viewingFormatPreference: ViewingFormatPreference | null;
+  personalizationEnabled?: boolean;
   services: StreamingServiceSelection[];
   languageCodes: string[];
 }
@@ -80,7 +86,7 @@ export class ProfileRepository implements ProfileRepositoryLike {
 
   async findByUserId(userId: string): Promise<StoredProfile | null> {
     const [rows] = await this.pool.query(
-      'SELECT user_id, first_name, last_name, display_name, country_code, viewing_format_preference, avatar_url, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url FROM profiles WHERE user_id = ? LIMIT 1',
+      'SELECT user_id, first_name, last_name, display_name, country_code, viewing_format_preference, personalization_enabled, avatar_url, avatar_id, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url FROM profiles WHERE user_id = ? LIMIT 1',
       [userId],
     );
 
@@ -91,16 +97,16 @@ export class ProfileRepository implements ProfileRepositoryLike {
     await this.pool.query(
       `INSERT INTO profiles
         (user_id, first_name, last_name, display_name, country_code, viewing_format_preference,
-         avatar_url, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url,
+         avatar_url, avatar_id, letterboxd_username, letterboxd_profile_url, tvtime_username, tvtime_profile_url,
          created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, NOW(3), NOW(3))
        ON DUPLICATE KEY UPDATE
          first_name = VALUES(first_name),
          last_name = VALUES(last_name),
          display_name = VALUES(display_name),
          country_code = VALUES(country_code),
          viewing_format_preference = VALUES(viewing_format_preference),
-         avatar_url = VALUES(avatar_url),
+         avatar_id = VALUES(avatar_id),
          letterboxd_username = VALUES(letterboxd_username),
          letterboxd_profile_url = VALUES(letterboxd_profile_url),
          tvtime_username = VALUES(tvtime_username),
@@ -113,7 +119,7 @@ export class ProfileRepository implements ProfileRepositoryLike {
         input.displayName,
         input.countryCode,
         input.viewingFormatPreference ?? null,
-        input.avatarUrl,
+        input.avatarId ?? null,
         input.letterboxdUsername,
         input.letterboxdProfileUrl,
         input.tvtimeUsername,
@@ -131,13 +137,14 @@ export class ProfileRepository implements ProfileRepositoryLike {
 
   async listStreamingServices(userId: string): Promise<StreamingServiceSelection[]> {
     const [rows] = await this.pool.query(
-      'SELECT tmdb_provider_id, provider_name FROM user_streaming_services WHERE user_id = ? ORDER BY provider_name ASC',
+      'SELECT tmdb_provider_id, provider_name, sort_order FROM user_streaming_services WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC',
       [userId],
     );
 
-    return (rows as Pick<StoredStreamingService, 'tmdb_provider_id' | 'provider_name'>[]).map((row) => ({
+    return (rows as Pick<StoredStreamingService, 'tmdb_provider_id' | 'provider_name' | 'sort_order'>[]).map((row) => ({
       providerId: row.tmdb_provider_id,
       providerName: row.provider_name,
+      sortOrder: row.sort_order,
     }));
   }
 
@@ -147,10 +154,10 @@ export class ProfileRepository implements ProfileRepositoryLike {
       await connection.beginTransaction();
       await connection.query('DELETE FROM user_streaming_services WHERE user_id = ?', [userId]);
 
-      for (const service of services) {
+      for (const [index, service] of services.entries()) {
         await connection.query(
-          'INSERT INTO user_streaming_services (user_streaming_service_id, user_id, tmdb_provider_id, provider_name, logo_path, country_code, created_at) VALUES (UUID(), ?, ?, ?, NULL, ?, NOW(3))',
-          [userId, service.providerId, service.providerName, countryCode],
+          'INSERT INTO user_streaming_services (user_streaming_service_id, user_id, tmdb_provider_id, provider_name, logo_path, country_code, sort_order, created_at) VALUES (UUID(), ?, ?, ?, NULL, ?, ?, NOW(3))',
+          [userId, service.providerId, service.providerName, countryCode, index],
         );
       }
 
@@ -208,15 +215,20 @@ export class ProfileRepository implements ProfileRepositoryLike {
       await connection.beginTransaction();
 
       await connection.query(
-        'UPDATE profiles SET country_code = ?, viewing_format_preference = ?, updated_at = NOW(3) WHERE user_id = ?',
-        [input.marketCode, input.viewingFormatPreference, userId],
+        'UPDATE profiles SET country_code = ?, viewing_format_preference = ?, personalization_enabled = COALESCE(?, personalization_enabled), updated_at = NOW(3) WHERE user_id = ?',
+        [
+          input.marketCode,
+          input.viewingFormatPreference,
+          input.personalizationEnabled === undefined ? null : (input.personalizationEnabled ? 1 : 0),
+          userId,
+        ],
       );
 
       await connection.query('DELETE FROM user_streaming_services WHERE user_id = ?', [userId]);
-      for (const service of input.services) {
+      for (const [index, service] of input.services.entries()) {
         await connection.query(
-          'INSERT INTO user_streaming_services (user_streaming_service_id, user_id, tmdb_provider_id, provider_name, logo_path, country_code, created_at) VALUES (UUID(), ?, ?, ?, NULL, ?, NOW(3))',
-          [userId, service.providerId, service.providerName, input.marketCode],
+          'INSERT INTO user_streaming_services (user_streaming_service_id, user_id, tmdb_provider_id, provider_name, logo_path, country_code, sort_order, created_at) VALUES (UUID(), ?, ?, ?, NULL, ?, ?, NOW(3))',
+          [userId, service.providerId, service.providerName, input.marketCode, index],
         );
       }
 
@@ -244,7 +256,8 @@ export interface ApiProfile {
   displayName: string;
   countryCode: string;
   viewingFormatPreference: ViewingFormatPreference | null;
-  avatarUrl: string | null;
+  personalizationEnabled: boolean;
+  avatarId: ScoutyAvatarId;
   letterboxdUsername: string | null;
   letterboxdProfileUrl: string | null;
   tvtimeUsername: string | null;
@@ -258,7 +271,8 @@ export function toApiProfile(profile: StoredProfile): ApiProfile {
     displayName: profile.display_name,
     countryCode: profile.country_code,
     viewingFormatPreference: profile.viewing_format_preference ?? null,
-    avatarUrl: profile.avatar_url,
+    personalizationEnabled: profile.personalization_enabled !== 0,
+    avatarId: resolveStoredAvatarId(profile.avatar_id),
     letterboxdUsername: profile.letterboxd_username,
     letterboxdProfileUrl: profile.letterboxd_profile_url,
     tvtimeUsername: profile.tvtime_username,
@@ -270,5 +284,5 @@ export function resolveServiceSelections(providerIds: number[]): StreamingServic
   return providerIds
     .map((id) => streamingServiceCatalog.find((item) => item.providerId === id))
     .filter((item): item is (typeof streamingServiceCatalog)[number] => Boolean(item))
-    .map((item) => ({ providerId: item.providerId, providerName: item.providerName }));
+    .map((item, index) => ({ providerId: item.providerId, providerName: item.providerName, sortOrder: index }));
 }

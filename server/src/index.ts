@@ -10,6 +10,10 @@ import { createAuthRouter } from './auth/auth-router';
 import { AuthRepository } from './auth/auth-repository';
 import { createProfileRouter } from './profile/profile-router';
 import { ProfileRepository } from './profile/profile-repository';
+import { FeedbackRepository } from './feedback/feedback-repository';
+import { createFeedbackRouter } from './feedback/feedback-router';
+import { LibraryRepository } from './library/library-repository';
+import { createLibraryRouter } from './library/library-router';
 import { createRecommendationsRouter } from './routes/recommendations';
 import { OpenAiService } from './services/openai-service';
 import { TmdbService } from './services/tmdb-service';
@@ -33,6 +37,8 @@ const databaseConnection = config.database ? createDatabaseConnection(config.dat
 const tmdbToken = config.tmdbToken;
 const authRepository = databaseConnection ? new AuthRepository(databaseConnection.pool) : null;
 const profileRepository = databaseConnection ? new ProfileRepository(databaseConnection.pool) : null;
+const feedbackRepository = databaseConnection ? new FeedbackRepository(databaseConnection.pool) : null;
+const libraryRepository = databaseConnection ? new LibraryRepository(databaseConnection.pool) : null;
 
 app.use(cors({
   origin: config.frontendOrigin ?? true,
@@ -95,6 +101,14 @@ if (authRepository) {
   if (profileRepository) {
     app.use('/api/profile', createProfileRouter(config, authRepository, profileRepository));
   }
+
+  if (feedbackRepository) {
+    app.use('/api/feedback', createFeedbackRouter(config, authRepository, feedbackRepository));
+  }
+
+  if (libraryRepository) {
+    app.use('/api/library', createLibraryRouter(config, authRepository, libraryRepository, tmdbService));
+  }
 } else {
   app.get('/api/auth/session', (_req, res) => {
     res.json({ authenticated: false, user: null, csrfToken: null });
@@ -111,9 +125,21 @@ if (authRepository) {
       error: 'Profile features are disabled until authentication is enabled.',
     });
   });
+
+  app.use('/api/feedback', (_req, res) => {
+    res.status(503).json({
+      error: 'Feedback features are disabled until authentication is enabled.',
+    });
+  });
+
+  app.use('/api/library', (_req, res) => {
+    res.status(503).json({
+      error: 'Library features are disabled until authentication is enabled.',
+    });
+  });
 }
 
-app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository));
+app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });
