@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { AuthActionRow } from '@/components/auth/auth-action-row';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthCard, authPrimaryButtonStyle, authPrimaryTextStyle } from '@/components/auth/auth-card';
 import { AuthFormField } from '@/components/auth/auth-form-field';
 import { ThemedText } from '@/components/themed-text';
 import { toSafeAuthActionMessage } from '@/features/auth/error-messages';
@@ -21,15 +21,17 @@ export default function ResetPasswordScreen() {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const submit = async () => {
+    if (busy) return;
     setErrors({});
     setMessage(null);
-    const parsed = resetPasswordSchema.safeParse({ password, confirmPassword });
+
     if (!token) {
       setStatus('error');
       setMessage('This reset link is invalid or incomplete. Request a new one to continue.');
       return;
     }
 
+    const parsed = resetPasswordSchema.safeParse({ password, confirmPassword });
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
       setErrors({
@@ -56,26 +58,63 @@ export default function ResetPasswordScreen() {
 
   return (
     <AuthCard title="Choose a new password" description="Create a new password for your Scouty.ca account.">
-      {!token ? <ThemedText>This reset link is invalid or incomplete. Request a new one to continue.</ThemedText> : null}
+      {!token ? (
+        <ThemedText style={{ color: '#b42318' }}>This reset link is invalid or incomplete. Request a new one to continue.</ThemedText>
+      ) : null}
       {status !== 'success' ? (
         <View style={{ gap: 16 }}>
-          <AuthFormField label="New password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoFocus error={errors.password} />
-          <AuthFormField label="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoCapitalize="none" error={errors.confirmPassword} />
-          <Pressable accessibilityLabel="Reset password" style={{ borderRadius: 999, backgroundColor: '#3c87f7', paddingHorizontal: 24, paddingVertical: 12, alignSelf: 'flex-start' }} onPress={() => void submit()} disabled={busy || !token}>
-            <ThemedText style={{ color: '#ffffff', fontWeight: '700' }}>Reset password</ThemedText>
+          <AuthFormField
+            label="New password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            textContentType="newPassword"
+            autoComplete="new-password"
+            autoFocus
+            hint="At least 12 characters"
+            error={errors.password}
+          />
+          <AuthFormField
+            label="Confirm new password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            textContentType="newPassword"
+            autoComplete="new-password"
+            error={errors.confirmPassword}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset password"
+            style={[authPrimaryButtonStyle, (busy || !token) && { opacity: 0.65 }]}
+            onPress={() => void submit()}
+            disabled={busy || !token}
+          >
+            {busy
+              ? <ActivityIndicator size="small" color="#ffffff" />
+              : <ThemedText style={authPrimaryTextStyle}>Reset password</ThemedText>}
           </Pressable>
         </View>
       ) : null}
-      {busy ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
-      {message ? <ThemedText themeColor={status === 'success' ? 'textSecondary' : undefined}>{message}</ThemedText> : null}
+      {message ? (
+        <ThemedText
+          style={status === 'error' ? { color: '#b42318', fontSize: 14 } : undefined}
+          themeColor={status === 'success' ? 'textSecondary' : undefined}
+          accessibilityLiveRegion="polite"
+        >
+          {message}
+        </ThemedText>
+      ) : null}
       <AuthActionRow>
         {status === 'success' ? (
           <Link href="/login" asChild>
-            <Pressable><ThemedText type="linkPrimary">Log in</ThemedText></Pressable>
+            <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Log in</ThemedText></Pressable>
           </Link>
         ) : (
           <Link href="/forgot-password" asChild>
-            <Pressable><ThemedText type="linkPrimary">Request a new reset email</ThemedText></Pressable>
+            <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Request a new reset email</ThemedText></Pressable>
           </Link>
         )}
       </AuthActionRow>

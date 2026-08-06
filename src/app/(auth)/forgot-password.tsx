@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable } from 'react-native';
 
 import { AuthActionRow } from '@/components/auth/auth-action-row';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthCard, authPrimaryButtonStyle, authPrimaryTextStyle } from '@/components/auth/auth-card';
 import { AuthFormField } from '@/components/auth/auth-form-field';
 import { ThemedText } from '@/components/themed-text';
 import { toSafeAuthActionMessage } from '@/features/auth/error-messages';
@@ -18,6 +18,7 @@ export default function ForgotPasswordScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const submit = async () => {
+    if (busy) return;
     setFieldError(null);
     setError(null);
     setNotice(null);
@@ -30,7 +31,7 @@ export default function ForgotPasswordScreen() {
     setBusy(true);
     try {
       await requestPasswordReset(parsed.data.email);
-      setNotice('If an account exists for that email address, we’ll send password-reset instructions.');
+      setNotice('If an account exists for that email address, we\u2019ll send password-reset instructions.');
     } catch (nextError) {
       setError(toSafeAuthActionMessage(nextError, 'We could not send reset instructions right now.'));
     } finally {
@@ -39,17 +40,35 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <AuthCard title="Reset your password" description="Enter your email and we’ll send reset instructions if an account exists.">
-      <AuthFormField label="Email address" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoFocus error={fieldError} />
-      <Pressable accessibilityLabel="Send reset link" style={{ borderRadius: 999, backgroundColor: '#3c87f7', paddingHorizontal: 24, paddingVertical: 12, alignSelf: 'flex-start' }} onPress={() => void submit()} disabled={busy}>
-        <ThemedText style={{ color: '#ffffff', fontWeight: '700' }}>Send reset link</ThemedText>
+    <AuthCard title="Reset your password" description="Enter your email and we\u2019ll send reset instructions if an account exists.">
+      <AuthFormField
+        label="Email address"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        autoComplete="email"
+        autoFocus
+        error={fieldError}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Send reset link"
+        style={[authPrimaryButtonStyle, busy && { opacity: 0.65 }]}
+        onPress={() => void submit()}
+        disabled={busy}
+      >
+        {busy
+          ? <ActivityIndicator size="small" color="#ffffff" />
+          : <ThemedText style={authPrimaryTextStyle}>Send reset link</ThemedText>}
       </Pressable>
-      {busy ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
-      {notice ? <ThemedText themeColor="textSecondary">{notice}</ThemedText> : null}
-      {error ? <ThemedText>{error}</ThemedText> : null}
+      {notice ? <ThemedText themeColor="textSecondary" accessibilityLiveRegion="polite">{notice}</ThemedText> : null}
+      {error ? <ThemedText style={{ color: '#b42318', fontSize: 14 }} accessibilityLiveRegion="polite">{error}</ThemedText> : null}
       <AuthActionRow>
         <Link href="/login" asChild>
-          <Pressable><ThemedText type="linkPrimary">Back to login</ThemedText></Pressable>
+          <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Back to login</ThemedText></Pressable>
         </Link>
       </AuthActionRow>
     </AuthCard>

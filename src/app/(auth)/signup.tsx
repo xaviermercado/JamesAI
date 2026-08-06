@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable } from 'react-native';
 
 import { AuthActionRow } from '@/components/auth/auth-action-row';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthCard, authPrimaryButtonStyle, authPrimaryTextStyle } from '@/components/auth/auth-card';
 import { AuthFormField } from '@/components/auth/auth-form-field';
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
@@ -31,6 +31,7 @@ export default function SignupScreen() {
   }
 
   const submit = async () => {
+    if (busy) return;
     setErrors({});
     setFormError(null);
     const parsed = signupFormSchema.safeParse({ firstName, lastName, email, password, confirmPassword });
@@ -64,21 +65,74 @@ export default function SignupScreen() {
 
   return (
     <AuthCard title="Create your Scouty.ca profile" description="Save your preferences and get recommendations that fit you.">
-      <AuthFormField label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" autoFocus error={errors.firstName} />
-      <AuthFormField label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" error={errors.lastName} />
-      <AuthFormField label="Email address" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" error={errors.email} />
-      <AuthFormField label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" error={errors.password} />
-      <AuthFormField label="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoCapitalize="none" error={errors.confirmPassword} />
-      <Pressable accessibilityLabel="Create account" style={{ borderRadius: 999, backgroundColor: '#3c87f7', paddingHorizontal: 24, paddingVertical: 12, alignSelf: 'flex-start' }} onPress={() => void submit()} disabled={busy}>
-        <ThemedText style={{ color: '#ffffff', fontWeight: '700' }}>Create account</ThemedText>
+      <AuthFormField
+        label="First name"
+        value={firstName}
+        onChangeText={setFirstName}
+        autoCapitalize="words"
+        textContentType="givenName"
+        autoComplete="given-name"
+        autoFocus
+        error={errors.firstName}
+      />
+      <AuthFormField
+        label="Last name"
+        value={lastName}
+        onChangeText={setLastName}
+        autoCapitalize="words"
+        textContentType="familyName"
+        autoComplete="family-name"
+        error={errors.lastName}
+      />
+      <AuthFormField
+        label="Email address"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        autoComplete="email"
+        error={errors.email}
+      />
+      <AuthFormField
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        textContentType="newPassword"
+        autoComplete="new-password"
+        hint="At least 12 characters"
+        error={errors.password}
+      />
+      <AuthFormField
+        label="Confirm password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        textContentType="newPassword"
+        autoComplete="new-password"
+        error={errors.confirmPassword}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create account"
+        style={[authPrimaryButtonStyle, busy && { opacity: 0.65 }]}
+        onPress={() => void submit()}
+        disabled={busy}
+      >
+        {busy
+          ? <ActivityIndicator size="small" color="#ffffff" />
+          : <ThemedText style={authPrimaryTextStyle}>Create account</ThemedText>}
       </Pressable>
-      {busy ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
-      {formError ? <ThemedText>{formError}</ThemedText> : null}
+      {formError ? <ThemedText style={{ color: '#b42318', fontSize: 14 }} accessibilityLiveRegion="polite">{formError}</ThemedText> : null}
       <AuthActionRow>
         <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'} asChild>
-          <Pressable><ThemedText type="linkPrimary">Log in</ThemedText></Pressable>
+          <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Log in</ThemedText></Pressable>
         </Link>
-        <ThemedText themeColor="textSecondary">By continuing, you agree to our Terms and Privacy.</ThemedText>
+        <ThemedText themeColor="textSecondary" style={{ fontSize: 13 }}>By continuing, you agree to our Terms and Privacy policy.</ThemedText>
       </AuthActionRow>
     </AuthCard>
   );

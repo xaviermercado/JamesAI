@@ -15,7 +15,7 @@ import type { UserProfile, UserStreamingService } from '@/types/profile';
 
 export default function ProfileSummaryScreen() {
   const router = useRouter();
-  const { csrfToken, clearSession } = useAuthSession();
+  const { csrfToken, clearSession, user } = useAuthSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [services, setServices] = useState<UserStreamingService[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +93,10 @@ export default function ProfileSummaryScreen() {
             <ThemedText type="smallBold">{profileName}</ThemedText>
             {profile?.displayName && profile.displayName !== profileName ? <ThemedText themeColor="textSecondary">Display name: {profile.displayName}</ThemedText> : null}
             <ThemedText themeColor="textSecondary">Country or region: {profile?.countryCode ?? 'Not set yet'}</ThemedText>
+            <ThemedText themeColor="textSecondary">Email: {user?.email ?? '—'}</ThemedText>
+            <ThemedText themeColor="textSecondary">
+              {user?.emailVerifiedAt ? 'Email verified' : 'Email not yet verified'}
+            </ThemedText>
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.sectionCard}>

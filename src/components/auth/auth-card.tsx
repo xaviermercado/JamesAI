@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppFooter } from '@/components/app-footer';
 import { AppHeader } from '@/components/app-header';
-import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { BrandColors, Radii, Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
@@ -36,6 +36,36 @@ export function AuthCard({ title, description, children }: AuthCardProps) {
   );
 }
 
+// Shared primary button style for auth pages.
+export const authPrimaryButtonStyle = {
+  borderRadius: Radii.pill,
+  backgroundColor: BrandColors.scoutyBlue,
+  paddingHorizontal: Spacing.four,
+  paddingVertical: 14,
+  minHeight: 52,
+  width: '100%',
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+} as const;
+
+export const authSecondaryButtonStyle = {
+  borderRadius: Radii.pill,
+  backgroundColor: '#eef3ff',
+  paddingHorizontal: Spacing.four,
+  paddingVertical: 14,
+  minHeight: 52,
+  width: '100%',
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+} as const;
+
+export const authPrimaryTextStyle = {
+  color: BrandColors.surface,
+  fontWeight: '700' as const,
+  fontSize: 16,
+  textAlign: 'center' as const,
+} as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -46,9 +76,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     width: '100%',
-    maxWidth: MaxContentWidth,
+    maxWidth: 560,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.four,
     gap: Spacing.four,
   },
@@ -60,7 +90,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BrandColors.border,
     boxShadow: '0 10px 30px rgba(11, 22, 51, 0.08)',
-    marginTop: Spacing.two,
   },
   header: {
     gap: Spacing.two,

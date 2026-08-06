@@ -372,4 +372,65 @@ describe('auth router', () => {
     expect(firstLogin.headers['set-cookie']).toBeDefined();
     expect(secondLogin.headers['set-cookie']).toBeDefined();
   });
+
+  it('blocks login for unverified accounts', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'unverified@example.com', password: 'password-password' });
+
+    // Do NOT verify email; attempt login immediately
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'unverified@example.com', password: 'password-password' });
+
+    expect(loginResponse.status).toBe(401);
+    expect(loginResponse.body.error).toBe('Invalid email or password');
+  });
+
+  it('restores an authenticated session via GET /session', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    const verificationToken = readTokenFromUrl(emailService.verificationUrls[0].verificationUrl);
+    await request(app).post('/api/auth/verify-email').set('Origin', 'https://app.example.com').send({ token: verificationToken });
+
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').set('Origin', 'https://app.example.com').send({ email: 'user@example.com', password: 'password-password' });
+
+    const sessionResponse = await agent.get('/api/auth/session').set('Origin', 'https://app.example.com');
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.authenticated).toBe(true);
+    expect(sessionResponse.body.user.email).toBe('user@example.com');
+    expect(sessionResponse.body.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('single-device logout does not revoke other active sessions', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    const verificationToken = readTokenFromUrl(emailService.verificationUrls[0].verificationUrl);
+    await request(app).post('/api/auth/verify-email').set('Origin', 'https://app.example.com').send({ token: verificationToken });
+
+    const agentA = request.agent(app);
+    const agentB = request.agent(app);
+
+    await agentA.post('/api/auth/login').set('Origin', 'https://app.example.com').send({ email: 'user@example.com', password: 'password-password' });
+    await agentB.post('/api/auth/login').set('Origin', 'https://app.example.com').send({ email: 'user@example.com', password: 'password-password' });
+
+    const sessionA = await agentA.get('/api/auth/session').set('Origin', 'https://app.example.com');
+    await agentA.post('/api/auth/logout').set('Origin', 'https://app.example.com').set('X-CSRF-Token', sessionA.body.csrfToken);
+
+    const afterA = await agentA.get('/api/auth/session').set('Origin', 'https://app.example.com');
+    const afterB = await agentB.get('/api/auth/session').set('Origin', 'https://app.example.com');
+
+    expect(afterA.body.authenticated).toBe(false);
+    expect(afterB.body.authenticated).toBe(true);
+  });
 });

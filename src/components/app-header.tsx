@@ -43,11 +43,18 @@ export function AppHeader() {
               </Pressable>
             </Link>
           ) : (
-            <Link href="/login" asChild>
-              <Pressable accessibilityRole="link" accessibilityLabel="Log in" style={navButtonStyle('ghost')}>
-                <ThemedText style={styles.ghostText}>Log in</ThemedText>
-              </Pressable>
-            </Link>
+            <>
+              <Link href="/login" asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel="Log in" style={navButtonStyle('ghost')}>
+                  <ThemedText style={styles.ghostText}>Log in</ThemedText>
+                </Pressable>
+              </Link>
+              <Link href="/signup" asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel="Create account" style={navButtonStyle('primary')}>
+                  <ThemedText style={styles.primaryText}>Create account</ThemedText>
+                </Pressable>
+              </Link>
+            </>
           )}
         </View>
       </View>
@@ -98,6 +105,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ghostText: {
+    color: BrandColors.surface,
+    fontFamily: Fonts.display,
+    fontWeight: '700',
+  },
+  primaryText: {
     color: BrandColors.surface,
     fontFamily: Fonts.display,
     fontWeight: '700',

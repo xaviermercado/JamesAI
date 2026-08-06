@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable } from 'react-native';
 
 import { AuthActionRow } from '@/components/auth/auth-action-row';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthCard, authPrimaryButtonStyle, authPrimaryTextStyle } from '@/components/auth/auth-card';
 import { AuthFormField } from '@/components/auth/auth-form-field';
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
@@ -28,6 +28,7 @@ export default function LoginScreen() {
   }
 
   const submit = async () => {
+    if (busy) return;
     setErrors({});
     setFormError(null);
     const parsed = loginFormSchema.safeParse({ email, password });
@@ -42,10 +43,7 @@ export default function LoginScreen() {
 
     setBusy(true);
     try {
-      const session = await loginAuthAccount({
-        email: parsed.data.email,
-        password: parsed.data.password,
-      });
+      const session = await loginAuthAccount({ email: parsed.data.email, password: parsed.data.password });
       applySession(session);
       router.replace((redirectTo ?? '/profile') as never);
     } catch (error) {
@@ -57,19 +55,46 @@ export default function LoginScreen() {
 
   return (
     <AuthCard title="Welcome back" description="Log in to access your saved preferences.">
-      <AuthFormField label="Email address" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoFocus error={errors.email} />
-      <AuthFormField label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" error={errors.password} />
-      <Pressable accessibilityLabel="Log in" style={{ borderRadius: 999, backgroundColor: '#3c87f7', paddingHorizontal: 24, paddingVertical: 12, alignSelf: 'flex-start' }} onPress={() => void submit()} disabled={busy}>
-        <ThemedText style={{ color: '#ffffff', fontWeight: '700' }}>Log in</ThemedText>
+      <AuthFormField
+        label="Email address"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        autoComplete="email"
+        autoFocus
+        error={errors.email}
+      />
+      <AuthFormField
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        textContentType="password"
+        autoComplete="current-password"
+        error={errors.password}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Log in"
+        style={[authPrimaryButtonStyle, busy && { opacity: 0.65 }]}
+        onPress={() => void submit()}
+        disabled={busy}
+      >
+        {busy
+          ? <ActivityIndicator size="small" color="#ffffff" />
+          : <ThemedText style={authPrimaryTextStyle}>Log in</ThemedText>}
       </Pressable>
-      {busy ? <ActivityIndicator size="small" color="#3c87f7" /> : null}
-      {formError ? <ThemedText>{formError}</ThemedText> : null}
+      {formError ? <ThemedText style={{ color: '#b42318', fontSize: 14 }} accessibilityLiveRegion="polite">{formError}</ThemedText> : null}
       <AuthActionRow>
         <Link href="/forgot-password" asChild>
-          <Pressable><ThemedText type="linkPrimary">Forgot password?</ThemedText></Pressable>
+          <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Forgot password?</ThemedText></Pressable>
         </Link>
         <Link href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : '/signup'} asChild>
-          <Pressable><ThemedText type="linkPrimary">Create account</ThemedText></Pressable>
+          <Pressable accessibilityRole="link"><ThemedText type="linkPrimary">Create account</ThemedText></Pressable>
         </Link>
       </AuthActionRow>
     </AuthCard>

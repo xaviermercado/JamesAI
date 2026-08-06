@@ -345,4 +345,54 @@ describe('profile router', () => {
     ]);
     expect(getResponse.body.catalog.length).toBeGreaterThan(0);
   });
+
+  it('profile data is isolated between users', async () => {
+    const config = createConfig();
+
+    // Create a second user
+    const now = new Date();
+    const userId2 = '33333333-3333-4333-8333-333333333333';
+    authRepo.users.set(userId2, {
+      user_id: userId2,
+      email: 'other@example.com',
+      password_hash: 'ignored',
+      email_verified_at: now,
+      account_status: 'active',
+      created_at: now,
+      updated_at: now,
+    });
+    const sessionToken2 = createSessionToken();
+    const sessionTokenHash2 = hashSessionToken(sessionToken2, config.sessionTokenPepper ?? '');
+    authRepo.sessions.set('44444444-4444-4444-8444-444444444444', {
+      session_id: '44444444-4444-4444-8444-444444444444',
+      user_id: userId2,
+      token_hash: sessionTokenHash2,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      revoked_at: null,
+      created_at: now,
+      last_used_at: null,
+      device_label: 'test-device-2',
+      client_platform: 'web',
+    });
+    const cookie2 = `${AUTH_SESSION_COOKIE_NAME}=${encodeURIComponent(sessionToken2)}`;
+
+    const session1 = createAuthenticatedSession(authRepo, config);
+
+    // User 1 saves a profile
+    await request(app)
+      .patch('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session1.cookie)
+      .set('X-CSRF-Token', session1.csrfToken)
+      .send({ firstName: 'Alice', lastName: 'One', displayName: 'Alice', countryCode: 'US' });
+
+    // User 2 reads their own profile — should not see user 1's data
+    const user2Profile = await request(app)
+      .get('/api/profile')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', cookie2);
+
+    expect(user2Profile.status).toBe(200);
+    expect(user2Profile.body.profile).toBeNull();
+  });
 });
