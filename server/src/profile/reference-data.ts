@@ -29,9 +29,13 @@ export interface CountryProviderCatalog {
 
 const countryNames = countries.getNames('en', { select: 'official' });
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export const countryCatalog: CountryCatalogItem[] = Object.entries(countryNames)
-  .filter(([code, name]) => code.length === 2 && Boolean(name?.trim()))
-  .map(([code, name]) => ({ code, name }))
+  .filter(([code, name]) => code.length === 2 && isNonEmptyString(name))
+  .map(([code, name]) => ({ code, name: name.trim() }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
 export const languageCatalog: readonly LanguageCatalogItem[] = [
