@@ -4,17 +4,27 @@ export interface RecommendationRequest {
   description: string;
   mediaType?: MediaType;
   maxRuntime?: number | null;
+  /** Temporary market override (ISO 3166-1 alpha-2). Server merges with saved preference when absent. */
   country?: string;
+  /** Legacy name-based provider list. Prefer providerIds when available. */
   streamingServices?: string[];
+  /** Temporary TMDB provider IDs. undefined = inherit saved; [] = explicitly any service. */
+  providerIds?: number[];
+  /** Temporary original-language codes (ISO 639-1). undefined = inherit saved; [] = any language. */
+  originalLanguages?: string[];
   excludedMovieIds?: number[];
 }
 
 export interface ParsedMovieCriteria {
   mediaType?: MediaType;
+  mood?: string;
+  includeGenres?: string[];
+  excludeGenres?: string[];
+  minYear?: number;
+  maxYear?: number;
   maxRuntime?: number;
   country?: string;
   streamingServices?: string[];
-  excludedMovieIds?: number[];
 }
 
 export interface MovieCandidate {
@@ -37,4 +47,12 @@ export interface MovieRecommendation extends MovieCandidate {
 export interface RecommendationResponse {
   recommendations: MovieRecommendation[];
   source: 'mock' | 'live';
+  /** Whether any saved profile preferences were applied to this request. */
+  preferencesApplied: boolean;
+  /** Concise context for the frontend. Safe to display. */
+  preferenceContext?: {
+    market?: string;
+    providerCount?: number;
+    languageCount?: number;
+  };
 }

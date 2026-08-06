@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppFooter } from '@/components/app-footer';
 import { AppHeader } from '@/components/app-header';
+import { useAuthSession } from '@/components/auth-session-provider';
 import { HeroRecommendationForm } from '@/components/hero-recommendation-form';
 import { RecommendationGrid } from '@/components/recommendation-grid';
 import { ScoutyStateMessage } from '@/components/scouty-state-message';
@@ -11,22 +12,51 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ENGINE_CREDIT } from '@/constants/brand';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { getMyPreferences } from '@/services/profile-api';
 import { getRecommendations } from '@/services/recommendations-api';
-import type { MediaType, MovieRecommendation, RecommendationRequest } from '@/types/recommendations';
+import type { MediaType, MovieRecommendation, RecommendationRequest, RecommendationResponse } from '@/types/recommendations';
+import type { UserPreferences } from '@/types/profile';
 
 type FeedbackAction = 'like' | 'dislike' | 'watched';
 
 export default function HomeScreen() {
+  const { status } = useAuthSession();
+
   const [description, setDescription] = useState('');
   const [mediaType, setMediaType] = useState<MediaType>('movie');
   const [maxRuntime, setMaxRuntime] = useState('');
-  const [country, setCountry] = useState('');
+  // Temporary filter overrides — start empty so server applies saved preferences by default.
+  const [countryOverride, setCountryOverride] = useState('');
   const [streamingServices, setStreamingServices] = useState('');
+  // null = inherit saved preference; [] = explicit "any language"
+  const [languageOverride, setLanguageOverride] = useState<string[] | null>(null);
+
+  const [savedPrefs, setSavedPrefs] = useState<UserPreferences | null>(null);
   const [recommendations, setRecommendations] = useState<MovieRecommendation[]>([]);
+  const [lastResult, setLastResult] = useState<RecommendationResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedbackById, setFeedbackById] = useState<Record<number, FeedbackAction>>({});
+
+  // Abort controller to cancel stale in-flight requests.
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Load saved preferences for authenticated users.
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    let active = true;
+    void getMyPreferences()
+      .then((prefs) => {
+        if (active) setSavedPrefs(prefs);
+      })
+      .catch(() => {
+        // Non-fatal: preferences unavailable, continue anonymously.
+      });
+
+    return () => { active = false; };
+  }, [status]);
 
   const submitRequest = async () => {
     if (!description.trim()) {
@@ -34,6 +64,11 @@ export default function HomeScreen() {
       setHasSearched(true);
       return;
     }
+
+    // Cancel any previous in-flight request.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setIsLoading(true);
     setError(null);
@@ -43,22 +78,36 @@ export default function HomeScreen() {
       description,
       mediaType,
       maxRuntime: maxRuntime ? Number(maxRuntime) : undefined,
-      country: country || undefined,
-      streamingServices: streamingServices
-        .split(',')
-        .map((service) => service.trim())
-        .filter(Boolean),
+      // Temporary market: pass only if user typed something (server uses saved market when absent).
+      country: countryOverride.trim() || undefined,
+      // Temporary language: pass if explicitly overridden (null = inherit saved from server).
+      originalLanguages: languageOverride ?? undefined,
       excludedMovieIds: recommendations.map((item) => item.tmdbMovieId),
     };
 
+    // Streaming services: if user typed provider names → use legacy names.
+    // If field is empty → pass nothing so server uses saved provider IDs.
+    const serviceNames = streamingServices.split(',').map((s) => s.trim()).filter(Boolean);
+    if (serviceNames.length > 0) {
+      request.streamingServices = serviceNames;
+    }
+
     try {
       const result = await getRecommendations(request);
-      setRecommendations(result.recommendations);
+      if (!controller.signal.aborted) {
+        setRecommendations(result.recommendations);
+        setLastResult(result);
+      }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Scouty hit a snag while searching. Please try again.');
-      setRecommendations([]);
+      if (!controller.signal.aborted) {
+        setError(nextError instanceof Error ? nextError.message : 'Scouty hit a snag while searching. Please try again.');
+        setRecommendations([]);
+        setLastResult(null);
+      }
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -69,9 +118,27 @@ export default function HomeScreen() {
   const clearFilters = () => {
     setMediaType('movie');
     setMaxRuntime('');
-    setCountry('');
+    setCountryOverride('');
     setStreamingServices('');
+    setLanguageOverride(null);
   };
+
+  // Build a human-readable summary of which saved preferences are active.
+  const savedPrefSummary = (() => {
+    if (status !== 'authenticated' || !savedPrefs) return null;
+    const parts: string[] = [];
+    if (savedPrefs.marketCode && !countryOverride.trim()) {
+      parts.push(savedPrefs.marketCode);
+    }
+    if (savedPrefs.streamingServices.length > 0 && !streamingServices.trim()) {
+      parts.push(`${savedPrefs.streamingServices.length} service${savedPrefs.streamingServices.length === 1 ? '' : 's'}`);
+    }
+    if (savedPrefs.contentLanguages.length > 0 && languageOverride === null) {
+      parts.push(`${savedPrefs.contentLanguages.length} language${savedPrefs.contentLanguages.length === 1 ? '' : 's'}`);
+    }
+    if (parts.length === 0) return null;
+    return `Using your saved preferences: ${parts.join(', ')}`;
+  })();
 
   return (
     <ThemedView style={styles.container}>
@@ -84,20 +151,24 @@ export default function HomeScreen() {
               description={description}
               mediaType={mediaType}
               maxRuntime={maxRuntime}
-              country={country}
+              country={countryOverride}
               streamingServices={streamingServices}
+              languageOverride={languageOverride}
+              savedPrefSummary={savedPrefSummary}
+              hasSavedLanguages={Boolean(savedPrefs?.contentLanguages.length)}
               onDescriptionChange={setDescription}
               onMediaTypeChange={setMediaType}
               onMaxRuntimeChange={setMaxRuntime}
-              onCountryChange={setCountry}
+              onCountryChange={setCountryOverride}
               onStreamingServicesChange={setStreamingServices}
+              onLanguageOverrideChange={setLanguageOverride}
               onClearFilters={clearFilters}
               onSubmit={() => void submitRequest()}
               isLoading={isLoading}
             />
 
             {!hasSearched ? (
-              <ScoutyStateMessage title="Scouty is ready when you are." body="Share your mood or occasion and Scouty will start scouting for tonight’s movie." />
+              <ScoutyStateMessage title="Scouty is ready when you are." body="Share your mood or occasion and Scouty will start scouting for tonight's movie." />
             ) : null}
 
             {error ? (
@@ -112,7 +183,7 @@ export default function HomeScreen() {
             {isLoading && recommendations.length === 0 ? (
               <View style={styles.loadingCard}>
                 <ActivityIndicator size="large" color={BrandColors.scoutyBlue} />
-                <ThemedText type="smallBold">Scouty is searching…</ThemedText>
+                <ThemedText type="smallBold">Scouty is searching...</ThemedText>
                 <ThemedText themeColor="textSecondary">Pulling together the closest matches for your mood.</ThemedText>
               </View>
             ) : null}
@@ -125,7 +196,12 @@ export default function HomeScreen() {
               <View style={styles.resultsSection}>
                 <View style={styles.resultsHeader}>
                   <ThemedText type="subtitle">Scouty found these for you</ThemedText>
-                  {isLoading ? <ThemedText themeColor="textSecondary">Refreshing your picks…</ThemedText> : null}
+                  {lastResult?.preferencesApplied ? (
+                    <ThemedText themeColor="textSecondary" accessibilityLiveRegion="polite" style={styles.prefNotice}>
+                      Recommendations reflect your saved preferences.
+                    </ThemedText>
+                  ) : null}
+                  {isLoading ? <ThemedText themeColor="textSecondary">Refreshing your picks...</ThemedText> : null}
                 </View>
                 <RecommendationGrid recommendations={recommendations} feedbackById={feedbackById} onAction={handleAction} />
               </View>
@@ -158,15 +234,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: Spacing.five,
-  },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  contentContainer: { paddingBottom: Spacing.five },
   mainColumn: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -175,9 +245,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.three,
     gap: Spacing.four,
   },
-  stateStack: {
-    gap: Spacing.two,
-  },
+  stateStack: { gap: Spacing.two },
   retryButton: {
     alignSelf: 'flex-start',
     minHeight: 44,
@@ -186,10 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: 12,
   },
-  retryText: {
-    color: BrandColors.surface,
-    fontWeight: '700',
-  },
+  retryText: { color: BrandColors.surface, fontWeight: '700' },
   loadingCard: {
     borderRadius: Radii.large,
     padding: Spacing.four,
@@ -199,28 +264,17 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     alignItems: 'center',
   },
-  resultsSection: {
-    gap: Spacing.three,
-  },
-  resultsHeader: {
-    gap: Spacing.one,
-  },
-  howSection: {
-    gap: Spacing.three,
-  },
-  howGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.three,
-  },
+  resultsSection: { gap: Spacing.three },
+  resultsHeader: { gap: Spacing.one },
+  prefNotice: { fontSize: 13 },
+  howSection: { gap: Spacing.three },
+  howGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three },
   howCard: {
     flexBasis: 260,
     flexGrow: 1,
     borderRadius: Radii.large,
     padding: Spacing.three,
-    gap: Spacing.two,
-    borderWidth: 1,
-    borderColor: BrandColors.border,
     minWidth: 0,
+    gap: Spacing.one,
   },
 });

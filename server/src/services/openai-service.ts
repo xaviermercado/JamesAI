@@ -121,11 +121,26 @@ export class OpenAiService {
           content:
             'You are ranking movie recommendations. Return JSON with a rankings array of {tmdbMovieId, explanation}. ' +
             'Order from best to worst match. Only include movies that are a genuine match — drop any that are clearly irrelevant. ' +
-            'Keep explanations to one sentence, specific to why this matches the request.',
+            'Keep explanations to one sentence, specific to why this matches the request. ' +
+            'If the request includes preferred languages, prefer titles in those original languages. ' +
+            'If the request includes streaming providers, note when a title is available on one of them.',
         },
         {
           role: 'user',
-          content: JSON.stringify({ request, candidates }),
+          content: JSON.stringify({
+            description: request.description,
+            mediaType: request.mediaType ?? 'movie',
+            country: request.country,
+            preferredLanguages: request.originalLanguages?.length ? request.originalLanguages : undefined,
+            candidates: candidates.map((c) => ({
+              tmdbMovieId: c.tmdbMovieId,
+              title: c.title,
+              releaseYear: c.releaseYear,
+              genres: c.genres,
+              providers: c.providers,
+              rating: c.tmdbRating,
+            })),
+          }),
         },
       ]);
 

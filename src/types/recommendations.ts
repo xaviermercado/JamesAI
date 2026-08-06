@@ -4,8 +4,14 @@ export interface RecommendationRequest {
   description: string;
   mediaType?: MediaType;
   maxRuntime?: number | null;
+  /** Temporary market override. Absent = server uses saved preference. */
   country?: string;
+  /** Legacy name-based provider list (anonymous users). */
   streamingServices?: string[];
+  /** Temporary TMDB provider IDs. [] = explicitly any service. Absent = server uses saved pref. */
+  providerIds?: number[];
+  /** Temporary language codes (ISO 639-1). [] = any language. Absent = server uses saved pref. */
+  originalLanguages?: string[];
   excludedMovieIds?: number[];
 }
 
@@ -41,4 +47,11 @@ export interface MovieRecommendation extends MovieCandidate {
 export interface RecommendationResponse {
   recommendations: MovieRecommendation[];
   source: 'mock' | 'live';
+  /** True when the server used at least one saved profile preference for this request. */
+  preferencesApplied: boolean;
+  preferenceContext?: {
+    market?: string;
+    providerCount?: number;
+    languageCount?: number;
+  };
 }

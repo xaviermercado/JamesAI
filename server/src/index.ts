@@ -113,7 +113,7 @@ if (authRepository) {
   });
 }
 
-app.use('/api', createRecommendationsRouter(tmdbService));
+app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });

@@ -190,5 +190,6 @@ export function getMockRecommendations(
   return {
     recommendations,
     source: 'mock',
+    preferencesApplied: false,
   };
 }
