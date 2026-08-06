@@ -162,10 +162,14 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
   }
 
   async findActiveSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null> {
-    return this.selectOne<SessionWithUser>(
+    // Diagnostic: log hash prefix to verify pepper consistency. Remove after confirming fix.
+    console.log('[session-lookup] hash prefix:', tokenHash.slice(0, 12));
+    const result = await this.selectOne<SessionWithUser>(
       'SELECT s.session_id, s.user_id, s.token_hash, s.expires_at, s.revoked_at, s.created_at, s.last_used_at, s.device_label, s.client_platform, u.email AS user_email, u.email_verified_at AS user_email_verified_at, u.account_status AS user_account_status, u.created_at AS user_created_at, u.updated_at AS user_updated_at FROM user_sessions s INNER JOIN users u ON u.user_id = s.user_id WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > NOW(3) LIMIT 1',
       [tokenHash],
     );
+    console.log('[session-lookup] found:', Boolean(result));
+    return result;
   }
 
   async touchSessionLastUsedAt(sessionId: string, threshold: Date): Promise<void> {
