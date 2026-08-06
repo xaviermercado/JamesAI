@@ -14,7 +14,7 @@ CREATE TABLE users (
 CREATE TABLE user_sessions (
   session_id CHAR(36) NOT NULL,
   user_id CHAR(36) NOT NULL,
-  token_hash CHAR(64) NOT NULL,
+  token_hash VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   expires_at DATETIME(3) NOT NULL,
   revoked_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
