@@ -343,14 +343,6 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
       const requestedProviderIds = [...parsed.data.providerIds];
 
       const incompatibleRequested = findIncompatibleProvidersForCountry(parsed.data.marketCode, requestedProviderIds);
-      if (incompatibleRequested.length > 0 && !parsed.data.allowProviderPrune) {
-        return res.status(409).json({
-          error: 'Selected providers are unavailable in the selected country',
-          incompatibleProviderIds: incompatibleRequested,
-          requiresConfirmation: true,
-        });
-      }
-
       const incompatibleExisting = findIncompatibleProvidersForCountry(
         parsed.data.marketCode,
         [...existingProviderIds],
@@ -386,6 +378,7 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         contentLanguages: languages,
         countryProviderCompatibility: {
           availabilityKnown: getCountryAwareProviderCatalog(parsed.data.marketCode).availabilityKnown,
+          incompatibleRequestedProviderIds: incompatibleRequested,
           removedProviderIds: parsed.data.allowProviderPrune ? incompatibleRequested : [],
           incompatibleExistingProviderIds: incompatibleExisting,
         },

@@ -740,7 +740,7 @@ describe('profile router', () => {
     expect(response.body.providers.some((provider: { providerName: string }) => provider.providerName === 'Crave')).toBe(true);
   });
 
-  it('prevents silent incompatible-provider removal when changing market', async () => {
+  it('preserves incompatible providers by default when changing market', async () => {
     const config = createConfig();
     const session = createAuthenticatedSession(authRepo, config);
 
@@ -767,9 +767,13 @@ describe('profile router', () => {
       .set('X-CSRF-Token', session.csrfToken)
       .send({ marketCode: 'CA', providerIds: [15, 8], languageCodes: [], viewingFormatPreference: null });
 
-    expect(response.status).toBe(409);
-    expect(response.body.requiresConfirmation).toBe(true);
-    expect(response.body.incompatibleProviderIds).toContain(15);
+    expect(response.status).toBe(200);
+    expect(response.body.streamingServices).toEqual([
+      { providerId: 15, providerName: 'Hulu', sortOrder: 0 },
+      { providerId: 8, providerName: 'Netflix', sortOrder: 1 },
+    ]);
+    expect(response.body.countryProviderCompatibility.incompatibleRequestedProviderIds).toContain(15);
+    expect(response.body.countryProviderCompatibility.removedProviderIds).toEqual([]);
   });
 
   it('removes incompatible providers only with explicit confirmation', async () => {
