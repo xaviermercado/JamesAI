@@ -44,13 +44,26 @@ describe('auth cookie SameSite policy', () => {
     expect(options.httpOnly).toBe(true);
   });
 
-  it('respects explicit SameSite override from configuration', () => {
+  it('still enforces SameSite=None for cross-site requests even with explicit override', () => {
     const config = createConfig();
     config.authCookieSameSite = 'strict';
 
     const sameSite = resolveSameSite(config, {
       requestOrigin: 'https://scouty.ca',
       requestHost: 'scouty-api.onrender.com',
+      requestProtocol: 'https',
+    });
+
+    expect(sameSite).toBe('none');
+  });
+
+  it('respects explicit SameSite override for same-site requests', () => {
+    const config = createConfig();
+    config.authCookieSameSite = 'strict';
+
+    const sameSite = resolveSameSite(config, {
+      requestOrigin: 'https://app.scouty.ca',
+      requestHost: 'api.scouty.ca',
       requestProtocol: 'https',
     });
 

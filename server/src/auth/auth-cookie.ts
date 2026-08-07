@@ -54,14 +54,17 @@ function isCrossSiteRequest(context?: SessionCookieContext): boolean {
 }
 
 export function resolveSameSite(config: AppConfig, context?: SessionCookieContext): CookieOptions['sameSite'] {
-  if (config.authCookieSameSite) {
-    return config.authCookieSameSite;
-  }
+  const crossSiteRequest = isCrossSiteRequest(context);
 
   // Cross-site frontend -> API requests require SameSite=None for the session
   // cookie to be sent on XHR/fetch after login and during session restoration.
-  if (isCrossSiteRequest(context)) {
+  // Enforce this even when a stricter env override was applied accidentally.
+  if (config.nodeEnv === 'production' && crossSiteRequest) {
     return 'none';
+  }
+
+  if (config.authCookieSameSite) {
+    return config.authCookieSameSite;
   }
 
   return 'lax';
