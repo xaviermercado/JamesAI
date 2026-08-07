@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { scoutyHeroMascot } from '@/constants/brand';
 import { BrandColors, Fonts, Radii, Spacing } from '@/constants/theme';
 import { getHeroPresentationData, type HeroPresentationData } from '@/features/hero/hero-period';
 import { FilterPanel } from '@/components/filter-panel';
@@ -90,38 +89,24 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
             </View>
           ) : null}
 
-          <View style={styles.promptWithMascotRow}>
-            <View style={styles.promptColumn}>
-              <TextInput
-                accessibilityLabel="What should we watch tonight?"
-                multiline
-                numberOfLines={4}
-                value={props.description}
-                onChangeText={props.onDescriptionChange}
-                placeholder="I’m in the mood for something…"
-                placeholderTextColor="#6d86c7"
-                style={styles.promptInput}
-              />
+          <TextInput
+            accessibilityLabel="What should we watch tonight?"
+            multiline
+            numberOfLines={4}
+            value={props.description}
+            onChangeText={props.onDescriptionChange}
+            placeholder="I’m in the mood for something…"
+            placeholderTextColor="#6d86c7"
+            style={styles.promptInput}
+          />
 
-              <View style={styles.actionRow}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Open filters" style={({ hovered, pressed }) => [styles.filterButton, hovered && styles.secondaryHover, pressed && styles.buttonPressed]} onPress={() => setShowFilters((current) => !current)}>
-                  <ThemedText style={styles.filterButtonText}>{activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}</ThemedText>
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Find something to watch" style={({ hovered, pressed }) => [styles.primaryButton, hovered && styles.primaryHover, pressed && styles.buttonPressed, props.isLoading && styles.buttonDisabled]} onPress={props.onSubmit} disabled={props.isLoading}>
-                  <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
-                </Pressable>
-              </View>
-            </View>
-
-            <View pointerEvents="none" style={styles.mascotColumn}>
-              <Image
-                source={scoutyHeroMascot}
-                style={styles.mascot}
-                contentFit="contain"
-                accessibilityLabel=""
-                accessible={false}
-              />
-            </View>
+          <View style={styles.actionRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open filters" style={({ hovered, pressed }) => [styles.filterButton, hovered && styles.secondaryHover, pressed && styles.buttonPressed]} onPress={() => setShowFilters((current) => !current)}>
+              <ThemedText style={styles.filterButtonText}>{activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}</ThemedText>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Find something to watch" style={({ hovered, pressed }) => [styles.primaryButton, hovered && styles.primaryHover, pressed && styles.buttonPressed, props.isLoading && styles.buttonDisabled]} onPress={props.onSubmit} disabled={props.isLoading}>
+              <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
+            </Pressable>
           </View>
 
           {showFilters ? (
@@ -156,8 +141,6 @@ const styles = StyleSheet.create({
   contentColumnMobile: { flexGrow: 1, flexBasis: 520, maxWidth: 760, gap: Spacing.three, zIndex: 1 },
   title: { color: BrandColors.surface, fontSize: 72, lineHeight: 76, maxWidth: 620 },
   subtitle: { color: BrandColors.surface, fontSize: 18, lineHeight: 30, maxWidth: 520 },
-  promptWithMascotRow: { width: '100%', minWidth: 0 },
-  promptColumn: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: Spacing.two },
   prefBanner: {
     backgroundColor: 'rgba(52,120,246,0.18)',
     borderRadius: Radii.medium,
