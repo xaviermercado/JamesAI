@@ -73,13 +73,13 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
       <Image source={backgroundForPeriod(presentation)} style={styles.heroBackground} contentFit="cover" accessibilityLabel="" accessible={false} />
       <View style={[styles.heroOverlay, { backgroundColor: presentation.overlayColor }]} />
 
-      <View style={[styles.heroInner, isMobile ? styles.heroInnerMobile : styles.heroInnerDesktop]}>
+      <View style={styles.heroInner}>
         <View style={isMobile ? styles.contentColumnMobile : styles.contentColumnDesktop}>
-          <ThemedText type="title" style={[styles.titleBase, isMobile ? styles.titleMobile : styles.titleDesktop]}>
-            {presentation.heading}
+          <ThemedText type="title" style={styles.title}>
+            What should we watch tonight?
           </ThemedText>
 
-          <ThemedText style={isMobile ? styles.subtitleMobile : styles.subtitleDesktop}>
+          <ThemedText style={styles.subtitle}>
             Tell Scouty your mood, occasion, or oddly specific craving.
           </ThemedText>
 
@@ -90,52 +90,25 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
             </View>
           ) : null}
 
-          <View style={[styles.promptWithMascotRow, isMobile ? styles.promptWithMascotRowMobile : styles.promptWithMascotRowDesktop]}>
+          <View style={styles.promptWithMascotRow}>
             <View style={styles.promptColumn}>
               <TextInput
-                accessibilityLabel="What do you wanna watch?"
+                accessibilityLabel="What should we watch tonight?"
                 multiline
-                numberOfLines={isMobile ? 3 : 4}
+                numberOfLines={4}
                 value={props.description}
                 onChangeText={props.onDescriptionChange}
-                placeholder={isMobile ? "Tell Scouty what you're in the mood for\u2026" : "I'm in the mood for something\u2026"}
+                placeholder="I’m in the mood for something…"
                 placeholderTextColor="#6d86c7"
-                style={[styles.promptInputBase, isMobile ? styles.promptInputMobile : styles.promptInputDesktop]}
+                style={styles.promptInput}
               />
 
-              <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Find something to watch"
-                  style={({ hovered, pressed }) => [
-                    styles.primaryButtonBase,
-                    isMobile ? styles.primaryButtonMobile : styles.primaryButtonDesktop,
-                    hovered && styles.primaryHover,
-                    pressed && styles.buttonPressed,
-                    props.isLoading && styles.buttonDisabled,
-                  ]}
-                  onPress={props.onSubmit}
-                  disabled={props.isLoading}
-                >
-                  <ThemedText style={isMobile ? styles.primaryButtonTextMobile : styles.primaryButtonTextDesktop}>
-                    {props.isLoading ? 'Scouty is searching...' : 'Find something to watch'}
-                  </ThemedText>
+              <View style={styles.actionRow}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Open filters" style={({ hovered, pressed }) => [styles.filterButton, hovered && styles.secondaryHover, pressed && styles.buttonPressed]} onPress={() => setShowFilters((current) => !current)}>
+                  <ThemedText style={styles.filterButtonText}>{activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}</ThemedText>
                 </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open filters"
-                  style={({ hovered, pressed }) => [
-                    styles.filterButtonBase,
-                    isMobile ? styles.filterButtonMobile : styles.filterButtonDesktop,
-                    hovered && styles.secondaryHover,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => setShowFilters((c) => !c)}
-                >
-                  <ThemedText style={isMobile ? styles.buttonTextMobile : styles.filterButtonTextDesktop}>
-                    {activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}
-                  </ThemedText>
+                <Pressable accessibilityRole="button" accessibilityLabel="Find something to watch" style={({ hovered, pressed }) => [styles.primaryButton, hovered && styles.primaryHover, pressed && styles.buttonPressed, props.isLoading && styles.buttonDisabled]} onPress={props.onSubmit} disabled={props.isLoading}>
+                  <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
                 </Pressable>
               </View>
             </View>
@@ -178,19 +151,12 @@ const styles = StyleSheet.create({
   heroOuter: { position: 'relative', overflow: 'hidden', borderRadius: Radii.hero, backgroundColor: BrandColors.midnight900, width: '100%' },
   heroBackground: { ...StyleSheet.absoluteFill },
   heroOverlay: { ...StyleSheet.absoluteFill },
-  heroInner: { flexDirection: 'row', width: '100%', minWidth: 0 },
-  heroInnerDesktop: { flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', padding: 40, gap: Spacing.four },
-  heroInnerMobile: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', padding: 16, gap: Spacing.two },
+  heroInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: Spacing.four, padding: 40 },
   contentColumnDesktop: { flexGrow: 1, flexBasis: 520, maxWidth: 760, gap: Spacing.three, zIndex: 1 },
-  contentColumnMobile: { flexGrow: 1, flexBasis: 520, maxWidth: 760, gap: Spacing.two, zIndex: 1 },
-  titleBase: { color: BrandColors.surface },
-  titleDesktop: { fontSize: 72, lineHeight: 76, maxWidth: 620 },
-  titleMobile: { fontSize: 36, lineHeight: 40 },
-  subtitleDesktop: { color: BrandColors.surface, fontSize: 18, lineHeight: 30, maxWidth: 520 },
-  subtitleMobile: { color: BrandColors.surface, fontSize: 15, lineHeight: 22 },
+  contentColumnMobile: { flexGrow: 1, flexBasis: 520, maxWidth: 760, gap: Spacing.three, zIndex: 1 },
+  title: { color: BrandColors.surface, fontSize: 72, lineHeight: 76, maxWidth: 620 },
+  subtitle: { color: BrandColors.surface, fontSize: 18, lineHeight: 30, maxWidth: 520 },
   promptWithMascotRow: { width: '100%', minWidth: 0 },
-  promptWithMascotRowDesktop: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.three },
-  promptWithMascotRowMobile: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two },
   promptColumn: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: Spacing.two },
   prefBanner: {
     backgroundColor: 'rgba(52,120,246,0.18)',
@@ -201,21 +167,12 @@ const styles = StyleSheet.create({
   },
   prefBannerText: { color: '#dbeafe', fontSize: 13, fontWeight: '600' },
   prefBannerHint: { color: '#93c5fd', fontSize: 12 },
-  promptInputBase: { borderRadius: Radii.large, backgroundColor: BrandColors.surface, color: BrandColors.ink, fontFamily: Fonts.sans, width: '100%', minWidth: 0 },
-  promptInputDesktop: { minHeight: 92, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, fontSize: 18 },
-  promptInputMobile: { minHeight: 120, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, fontSize: 16 },
-  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, minWidth: 0 },
-  actionRowMobile: { flexDirection: 'column', flexWrap: 'nowrap', gap: 12 },
-  filterButtonBase: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.48)', backgroundColor: 'rgba(7, 21, 47, 0.16)', minHeight: 52 },
-  filterButtonDesktop: { minWidth: 170, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
-  filterButtonMobile: { width: '100%', paddingHorizontal: Spacing.three, paddingVertical: 14 },
-  filterButtonTextDesktop: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 18 },
-  buttonTextMobile: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 17, textAlign: 'center' },
-  primaryButtonBase: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center', backgroundColor: BrandColors.scoutyBlue, minHeight: 52 },
-  primaryButtonDesktop: { minWidth: 300, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
-  primaryButtonMobile: { width: '100%', paddingHorizontal: Spacing.three, paddingVertical: 14 },
-  primaryButtonTextDesktop: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 20, textAlign: 'center' },
-  primaryButtonTextMobile: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 17, textAlign: 'center' },
+  promptInput: { minHeight: 92, borderRadius: Radii.large, backgroundColor: BrandColors.surface, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, color: BrandColors.ink, fontSize: 18, fontFamily: Fonts.sans },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  filterButton: { minHeight: 56, minWidth: 170, borderRadius: Radii.pill, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.48)', backgroundColor: 'rgba(7, 21, 47, 0.16)' },
+  filterButtonText: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 18 },
+  primaryButton: { minHeight: 56, minWidth: 300, borderRadius: Radii.pill, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, justifyContent: 'center', backgroundColor: BrandColors.scoutyBlue },
+  primaryButtonText: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 20, textAlign: 'center' },
   buttonDisabled: { opacity: 0.65 },
   mascotColumn: { flexBasis: 380, flexGrow: 1, alignItems: 'flex-end', justifyContent: 'flex-end', minHeight: 320 },
   mascot: { width: '100%', maxWidth: 420, minHeight: 320 },
