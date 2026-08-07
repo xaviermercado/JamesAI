@@ -6,7 +6,7 @@ export const contactSubmissionSchema = z.object({
   subject: z.string().trim().min(1).max(120).refine((value) => !/[\r\n]/.test(value), 'Invalid subject'),
   message: z.string().trim().min(10).max(4000),
   // Honeypot should stay blank for human users.
-  website: z.string().max(0).optional().default(''),
+  website: z.string().trim().max(255).optional().default(''),
 }).strict();
 
 export type ContactSubmissionInput = z.infer<typeof contactSubmissionSchema>;

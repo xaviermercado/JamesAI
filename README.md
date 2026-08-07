@@ -102,11 +102,12 @@ Render backend:
 Render email setup:
 
 - Set `EMAIL_PROVIDER=smtp`.
-- Set `EMAIL_HOST=mail.jamesnarvey.ca`.
+- Set `EMAIL_HOST=mail.scouty.ca`.
 - Set `EMAIL_PORT=465`.
 - Set `EMAIL_SECURE=true`.
-- Set `EMAIL_USER=do.not.reply@jamesnarvey.ca`.
-- Set `EMAIL_FROM=James AI <do.not.reply@jamesnarvey.ca>`.
+- Set `EMAIL_USER=do.not.reply@scouty.ca`.
+- Set `EMAIL_FROM=Scouty <do.not.reply@scouty.ca>`.
+- Set `CONTACT_EMAIL_TO` to the monitored Scouty inbox that should receive contact-form messages.
 - Set `EMAIL_API_KEY` to the mailbox password in Render only.
 - Keep `EMAIL_PROVIDER=console` for local development if you want verification and reset links printed to the server logs instead of sent by email.
 

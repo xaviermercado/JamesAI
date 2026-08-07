@@ -9,7 +9,6 @@ import { createEmailService, type EmailService } from '../email/email-service';
 import { contactSubmissionSchema } from './contact-schemas';
 import { logger } from '../utils/logger';
 
-const CONTACT_RECIPIENT = 'do.not.reply@scout.ca';
 const CSRF_TTL_MS = 10 * 60 * 1000;
 
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
@@ -56,6 +55,7 @@ export function createContactRouter(config: AppConfig, emailService: EmailServic
   const router = express.Router();
   const isProduction = config.nodeEnv === 'production';
   const csrfStore = new ContactCsrfStore();
+  const contactRecipient = config.contactEmailTo ?? config.emailFrom ?? 'contact@example.local';
 
   const submitLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -88,6 +88,9 @@ export function createContactRouter(config: AppConfig, emailService: EmailServic
   });
 
   router.post('/', submitLimiter, async (req, res) => {
+    const correlationId = randomBytes(12).toString('hex');
+    res.setHeader('x-correlation-id', correlationId);
+
     const csrfToken = req.get(AUTH_CSRF_HEADER_NAME)?.trim();
     if (!csrfToken || !csrfStore.consume(csrfToken)) {
       return res.status(403).json({ error: 'Forbidden' });
@@ -114,15 +117,16 @@ export function createContactRouter(config: AppConfig, emailService: EmailServic
       }
 
       await emailService.sendContactEmail({
-        to: CONTACT_RECIPIENT,
+        to: contactRecipient,
         senderName,
         senderEmail,
         subject,
         message,
+        correlationId,
       });
       return res.status(202).json({ ok: true });
     } catch (error) {
-      logger.error('contact.route_error', { route: 'POST /api/contact', error });
+      logger.error('contact.route_error', { route: 'POST /api/contact', correlationId, error });
       return res.status(502).json({ error: 'Unable to send your message right now. Please try again later.' });
     }
   });

@@ -21,6 +21,7 @@ const baseEnvSchema = z.object({
   EMAIL_USER: z.string().trim().min(1).optional(),
   EMAIL_API_KEY: z.string().trim().optional(),
   EMAIL_FROM: z.string().trim().min(1).optional(),
+  CONTACT_EMAIL_TO: z.string().trim().min(1).optional(),
   EMAIL_TOKEN_PEPPER: z.string().trim().min(32).optional(),
   MYSQL_HOST: z.string().trim().min(1).optional(),
   MYSQL_PORT: z.coerce.number().int().min(1).max(65535).optional().default(3306),
@@ -69,9 +70,47 @@ export interface AppConfig {
   emailUser?: string;
   emailApiKey?: string;
   emailFrom?: string;
+  contactEmailTo?: string;
   emailTokenPepper?: string;
   database: DatabaseConfig | null;
   sessionTokenPepper?: string;
+}
+
+function extractEmailAddress(value: string): string {
+  const trimmed = value.trim();
+  const angleMatch = trimmed.match(/<([^>]+)>/);
+  return (angleMatch?.[1] ?? trimmed).trim();
+}
+
+function hasScoutyDomain(value: string): boolean {
+  return /@scouty\.ca$/i.test(extractEmailAddress(value));
+}
+
+function ensureEmailConfig(env: BaseEnv, emailProvider: AppConfig['emailProvider']): void {
+  if (emailProvider !== 'smtp') {
+    return;
+  }
+
+  const missingEmailSmtp = [
+    !env.EMAIL_HOST ? 'EMAIL_HOST' : null,
+    !env.EMAIL_PORT ? 'EMAIL_PORT' : null,
+    !env.EMAIL_USER ? 'EMAIL_USER' : null,
+    !env.EMAIL_API_KEY ? 'EMAIL_API_KEY' : null,
+    !env.EMAIL_FROM ? 'EMAIL_FROM' : null,
+    !env.CONTACT_EMAIL_TO ? 'CONTACT_EMAIL_TO' : null,
+  ].filter((value): value is string => Boolean(value));
+
+  if (missingEmailSmtp.length) {
+    throw new Error(`Missing required SMTP environment variables: ${missingEmailSmtp.join(', ')}`);
+  }
+
+  if (!env.EMAIL_FROM || !hasScoutyDomain(env.EMAIL_FROM)) {
+    throw new Error('EMAIL_FROM must use an authorized @scouty.ca sender identity when SMTP is enabled');
+  }
+
+  if (!env.EMAIL_USER || !hasScoutyDomain(env.EMAIL_USER)) {
+    throw new Error('EMAIL_USER must use an authorized @scouty.ca mailbox when SMTP is enabled');
+  }
 }
 
 function shouldEnableDatabase(env: BaseEnv): boolean {
@@ -122,19 +161,6 @@ function ensureDatabaseConfig(env: BaseEnv): DatabaseConfig | null {
     throw new Error('EMAIL_PROVIDER is required in production when MySQL-enabled auth is active');
   }
 
-  if (emailProvider === 'smtp') {
-    const missingEmailSmtp = [
-      !env.EMAIL_HOST ? 'EMAIL_HOST' : null,
-      !env.EMAIL_PORT ? 'EMAIL_PORT' : null,
-      !env.EMAIL_USER ? 'EMAIL_USER' : null,
-      !env.EMAIL_API_KEY ? 'EMAIL_API_KEY' : null,
-    ].filter((value): value is string => Boolean(value));
-
-    if (missingEmailSmtp.length) {
-      throw new Error(`Missing required SMTP environment variables: ${missingEmailSmtp.join(', ')}`);
-    }
-  }
-
   return {
     host: mysqlHost,
     port: env.MYSQL_PORT,
@@ -149,8 +175,9 @@ function ensureDatabaseConfig(env: BaseEnv): DatabaseConfig | null {
 
 export function loadAppConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = baseEnvSchema.parse(rawEnv);
-  const database = ensureDatabaseConfig(parsed);
   const emailProvider: AppConfig['emailProvider'] = parsed.EMAIL_PROVIDER?.trim() === 'smtp' ? 'smtp' : 'console';
+  ensureEmailConfig(parsed, emailProvider);
+  const database = ensureDatabaseConfig(parsed);
 
   return {
     port: parsed.PORT,
@@ -171,6 +198,7 @@ export function loadAppConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConfi
     emailUser: parsed.EMAIL_USER?.trim() || undefined,
     emailApiKey: parsed.EMAIL_API_KEY?.trim() || undefined,
     emailFrom: parsed.EMAIL_FROM?.trim() || undefined,
+    contactEmailTo: parsed.CONTACT_EMAIL_TO?.trim() || undefined,
     emailTokenPepper: parsed.EMAIL_TOKEN_PEPPER?.trim() || undefined,
     database,
     sessionTokenPepper: parsed.SESSION_TOKEN_PEPPER?.trim() || undefined,
