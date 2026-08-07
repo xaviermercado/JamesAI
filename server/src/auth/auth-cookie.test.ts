@@ -42,6 +42,7 @@ describe('auth cookie SameSite policy', () => {
     expect(options.sameSite).toBe('none');
     expect(options.secure).toBe(true);
     expect(options.httpOnly).toBe(true);
+    expect((options as { partitioned?: boolean }).partitioned).toBe(true);
   });
 
   it('still enforces SameSite=None for cross-site requests even with explicit override', () => {
@@ -68,5 +69,16 @@ describe('auth cookie SameSite policy', () => {
     });
 
     expect(sameSite).toBe('strict');
+  });
+
+  it('does not mark same-site cookies as partitioned', () => {
+    const config = createConfig();
+    const options = getSessionCookieOptions(config, {
+      requestOrigin: 'https://app.scouty.ca',
+      requestHost: 'api.scouty.ca',
+      requestProtocol: 'https',
+    });
+
+    expect((options as { partitioned?: boolean }).partitioned).toBeUndefined();
   });
 });

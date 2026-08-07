@@ -70,6 +70,10 @@ export function resolveSameSite(config: AppConfig, context?: SessionCookieContex
   return 'lax';
 }
 
+function shouldUsePartitionedCookie(config: AppConfig, context?: SessionCookieContext): boolean {
+  return config.nodeEnv === 'production' && isCrossSiteRequest(context);
+}
+
 function resolveSecure(config: AppConfig, context?: SessionCookieContext): boolean {
   // SameSite=None is only valid on Secure cookies — enforce this automatically.
   const sameSite = resolveSameSite(config, context);
@@ -78,7 +82,7 @@ function resolveSecure(config: AppConfig, context?: SessionCookieContext): boole
 }
 
 export function getSessionCookieOptions(config: AppConfig, context?: SessionCookieContext): CookieOptions {
-  return {
+  const options: CookieOptions & { partitioned?: boolean } = {
     httpOnly: true,
     secure: resolveSecure(config, context),
     sameSite: resolveSameSite(config, context),
@@ -86,6 +90,12 @@ export function getSessionCookieOptions(config: AppConfig, context?: SessionCook
     path: '/',
     maxAge: SESSION_TTL_MS,
   };
+
+  if (shouldUsePartitionedCookie(config, context)) {
+    options.partitioned = true;
+  }
+
+  return options;
 }
 
 export function setSessionCookie(res: Response, token: string, config: AppConfig, context?: SessionCookieContext): void {
