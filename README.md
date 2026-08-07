@@ -130,7 +130,9 @@ Cookie and CSRF behavior:
 
 - Session cookies are HttpOnly.
 - Production cookies are `Secure`.
-- `SameSite` defaults to `none` in production and `lax` in development unless overridden.
+- `SameSite` is resolved from deployment context unless explicitly overridden:
+- same-site frontend/API requests default to `Lax`.
+- cross-site frontend/API requests default to `None` (with `Secure`) so authenticated fetch requests can carry the session cookie.
 - `GET /api/auth/session` restores the session and returns a per-session CSRF token for state-changing requests.
 - `POST /api/auth/logout` and `POST /api/auth/logout-all` require the CSRF token header.
 - If HostGator and Render remain on different sites, `SameSite=None; Secure` is used with CSRF protection.

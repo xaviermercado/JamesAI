@@ -5,38 +5,92 @@ import { AUTH_SESSION_COOKIE_NAME } from './auth-crypto';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export function resolveSameSite(config: AppConfig): CookieOptions['sameSite'] {
+export interface SessionCookieContext {
+  requestOrigin?: string;
+  requestHost?: string;
+  requestProtocol?: string;
+}
+
+function normalizeProtocol(value: string): string {
+  return value.replace(/:$/, '').toLowerCase();
+}
+
+function isIpLikeHost(hostname: string): boolean {
+  return /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes(':');
+}
+
+function siteFromHostname(hostname: string): string {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized || normalized === 'localhost' || isIpLikeHost(normalized)) {
+    return normalized;
+  }
+
+  const labels = normalized.split('.').filter(Boolean);
+  if (labels.length <= 2) {
+    return normalized;
+  }
+
+  return labels.slice(-2).join('.');
+}
+
+function isCrossSiteRequest(context?: SessionCookieContext): boolean {
+  if (!context?.requestOrigin || !context.requestHost) {
+    return false;
+  }
+
+  try {
+    const originUrl = new URL(context.requestOrigin);
+    const requestProtocol = normalizeProtocol(context.requestProtocol ?? originUrl.protocol);
+    const apiUrl = new URL(`${requestProtocol}://${context.requestHost}`);
+
+    if (normalizeProtocol(originUrl.protocol) !== normalizeProtocol(apiUrl.protocol)) {
+      return true;
+    }
+
+    return siteFromHostname(originUrl.hostname) !== siteFromHostname(apiUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function resolveSameSite(config: AppConfig, context?: SessionCookieContext): CookieOptions['sameSite'] {
   if (config.authCookieSameSite) {
     return config.authCookieSameSite;
+  }
+
+  // Cross-site frontend -> API requests require SameSite=None for the session
+  // cookie to be sent on XHR/fetch after login and during session restoration.
+  if (isCrossSiteRequest(context)) {
+    return 'none';
   }
 
   return 'lax';
 }
 
-function resolveSecure(config: AppConfig): boolean {
+function resolveSecure(config: AppConfig, context?: SessionCookieContext): boolean {
   // SameSite=None is only valid on Secure cookies — enforce this automatically.
-  const sameSite = resolveSameSite(config);
+  const sameSite = resolveSameSite(config, context);
   if (sameSite === 'none') return true;
   return config.nodeEnv === 'production';
 }
 
-export function getSessionCookieOptions(config: AppConfig): CookieOptions {
+export function getSessionCookieOptions(config: AppConfig, context?: SessionCookieContext): CookieOptions {
   return {
     httpOnly: true,
-    secure: resolveSecure(config),
-    sameSite: resolveSameSite(config),
+    secure: resolveSecure(config, context),
+    sameSite: resolveSameSite(config, context),
     domain: config.authCookieDomain,
     path: '/',
     maxAge: SESSION_TTL_MS,
   };
 }
 
-export function setSessionCookie(res: Response, token: string, config: AppConfig): void {
-  res.cookie(AUTH_SESSION_COOKIE_NAME, token, getSessionCookieOptions(config));
+export function setSessionCookie(res: Response, token: string, config: AppConfig, context?: SessionCookieContext): void {
+  res.cookie(AUTH_SESSION_COOKIE_NAME, token, getSessionCookieOptions(config, context));
 }
 
-export function clearSessionCookie(res: Response, config: AppConfig): void {
-  res.clearCookie(AUTH_SESSION_COOKIE_NAME, getSessionCookieOptions(config));
+export function clearSessionCookie(res: Response, config: AppConfig, context?: SessionCookieContext): void {
+  res.clearCookie(AUTH_SESSION_COOKIE_NAME, getSessionCookieOptions(config, context));
 }
 
 export function getSessionTtlMs(): number {

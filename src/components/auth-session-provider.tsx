@@ -50,6 +50,21 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshSession]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const onUnauthorized = () => {
+      clearSession();
+    };
+
+    window.addEventListener('jamesai:unauthorized', onUnauthorized);
+    return () => {
+      window.removeEventListener('jamesai:unauthorized', onUnauthorized);
+    };
+  }, [clearSession]);
+
   return <AuthSessionContext.Provider value={{ status, user, csrfToken, refreshSession, applySession, clearSession }}>{children}</AuthSessionContext.Provider>;
 }
 

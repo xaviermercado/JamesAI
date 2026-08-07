@@ -11,6 +11,18 @@ import { AuthService } from './auth-service';
 import type { EmailService } from '../email/email-service';
 import { logger } from '../utils/logger';
 
+function buildCookieContext(req: Request) {
+  const forwardedProtoHeader = req.get('x-forwarded-proto');
+  const requestProtocol = forwardedProtoHeader?.split(',')[0]?.trim() || req.protocol;
+  const requestHost = req.get('x-forwarded-host')?.split(',')[0]?.trim() || req.get('host') || undefined;
+
+  return {
+    requestOrigin: req.headers.origin,
+    requestProtocol,
+    requestHost,
+  };
+}
+
 function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
   if (!cookieHeader) {
     return null;
@@ -193,7 +205,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
         return res.status(500).json({ error: 'Unable to create session' });
       }
 
-      setSessionCookie(res, result.sessionToken, config);
+      setSessionCookie(res, result.sessionToken, config, buildCookieContext(req));
       return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken });
     } catch (error) {
       logAuthRouteError('/login', req, error);
@@ -210,14 +222,14 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
     try {
       const restored = await authService.restoreSession(sessionToken);
       if (!restored.authenticated || !restored.identity) {
-        clearSessionCookie(res, config);
+        clearSessionCookie(res, config, buildCookieContext(req));
         return res.json({ authenticated: false, user: null, csrfToken: null });
       }
 
       return res.json({ authenticated: true, user: restored.user, csrfToken: restored.identity.csrfToken });
     } catch (error) {
       logAuthRouteError('/session', req, error);
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ authenticated: false, user: null, csrfToken: null });
     }
   });
@@ -225,14 +237,14 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
   router.post('/logout', async (req, res) => {
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     }
 
     const sessionTokenHash = hashSessionToken(sessionToken, config.sessionTokenPepper ?? '');
     const restored = await authService.restoreSession(sessionToken);
     if (!restored.authenticated || !restored.identity) {
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     }
 
@@ -242,7 +254,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
 
     try {
       await authService.logout(sessionToken);
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     } catch (error) {
       logAuthRouteError('/logout', req, error);
@@ -253,13 +265,13 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
   router.post('/logout-all', async (req, res) => {
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     }
 
     const restored = await authService.restoreSession(sessionToken);
     if (!restored.authenticated || !restored.identity) {
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     }
 
@@ -269,7 +281,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
 
     try {
       await authService.logoutAll(restored.identity.userId);
-      clearSessionCookie(res, config);
+      clearSessionCookie(res, config, buildCookieContext(req));
       return res.json({ ok: true });
     } catch (error) {
       logAuthRouteError('/logout-all', req, error);

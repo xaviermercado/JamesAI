@@ -202,6 +202,16 @@ function createConfig(): AppConfig {
   };
 }
 
+function createProductionConfig(): AppConfig {
+  return {
+    ...createConfig(),
+    nodeEnv: 'production',
+    frontendOrigin: 'https://scouty.ca',
+    appBaseUrl: 'https://scouty.ca',
+    authCookieSameSite: undefined,
+  };
+}
+
 function createApp(repository: InMemoryAuthRepository, emailService: FakeEmailService) {
   const app = express();
   app.use(express.json());
@@ -432,5 +442,49 @@ describe('auth router', () => {
 
     expect(afterA.body.authenticated).toBe(false);
     expect(afterB.body.authenticated).toBe(true);
+  });
+
+  it('issues cross-site compatible cookie so first protected request after login succeeds', async () => {
+    const repo = new InMemoryAuthRepository();
+    const mail = new FakeEmailService();
+    const prodApp = express();
+    prodApp.use(express.json());
+    prodApp.use('/api/auth', createAuthRouter(createProductionConfig(), repo, mail));
+
+    await request(prodApp)
+      .post('/api/auth/register')
+      .set('Origin', 'https://scouty.ca')
+      .set('Host', 'scouty-api.onrender.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    const verificationToken = readTokenFromUrl(mail.verificationUrls[0].verificationUrl);
+    await request(prodApp)
+      .post('/api/auth/verify-email')
+      .set('Origin', 'https://scouty.ca')
+      .set('Host', 'scouty-api.onrender.com')
+      .send({ token: verificationToken });
+
+    const loginRes = await request(prodApp)
+      .post('/api/auth/login')
+      .set('Origin', 'https://scouty.ca')
+      .set('Host', 'scouty-api.onrender.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    expect(loginRes.status).toBe(200);
+    const setCookie = loginRes.headers['set-cookie']?.[0] ?? '';
+    expect(setCookie).toContain('Secure');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=None');
+
+    // Simulate the browser including only cookies that are valid for cross-site fetch.
+    const cookieHeader = setCookie.includes('SameSite=None') ? setCookie.split(';')[0] : '';
+    const sessionRes = await request(prodApp)
+      .get('/api/auth/session')
+      .set('Origin', 'https://scouty.ca')
+      .set('Host', 'scouty-api.onrender.com')
+      .set('Cookie', cookieHeader);
+
+    expect(sessionRes.status).toBe(200);
+    expect(sessionRes.body.authenticated).toBe(true);
   });
 });
