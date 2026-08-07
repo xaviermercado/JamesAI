@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { getAuthSession } from '@/services/auth-api';
+import { clearAuthSessionToken, setAuthSessionToken } from '@/services/auth-session-token';
 import type { AuthSessionResponse, SafeUser } from '@/types/auth';
 
 interface AuthSessionContextValue {
@@ -23,12 +24,21 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
     setStatus(session.authenticated ? 'authenticated' : 'anonymous');
     setUser(session.user);
     setCsrfToken(session.csrfToken);
+
+    if (session.sessionToken) {
+      setAuthSessionToken(session.sessionToken);
+    }
+
+    if (!session.authenticated) {
+      clearAuthSessionToken();
+    }
   }, []);
 
   const clearSession = useCallback(() => {
     setStatus('anonymous');
     setUser(null);
     setCsrfToken(null);
+    clearAuthSessionToken();
   }, []);
 
   const refreshSession = useCallback(async () => {

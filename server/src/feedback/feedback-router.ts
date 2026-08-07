@@ -1,22 +1,14 @@
 import type { Request, Response } from 'express';
 import express from 'express';
 
-import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
+import { getSessionTokenFromRequest } from '../auth/auth-request';
+import { AUTH_CSRF_HEADER_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { AuthService } from '../auth/auth-service';
 import type { AppConfig } from '../config/env';
 import type { FeedbackRepositoryLike } from './feedback-repository';
 import { submitFeedbackSchema } from './feedback-schemas';
 import { logger } from '../utils/logger';
-
-function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(';')) {
-    const [key, ...valueParts] = part.trim().split('=');
-    if (key === name) return decodeURIComponent(valueParts.join('='));
-  }
-  return null;
-}
 
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
   if (!origin || !config.frontendOrigin) return true;
@@ -57,7 +49,7 @@ export function createFeedbackRouter(
 
   // GET /api/feedback — list all feedback for the current user.
   router.get('/', async (req: Request, res: Response) => {
-    const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -74,7 +66,7 @@ export function createFeedbackRouter(
 
   // POST /api/feedback — create or update feedback for a title.
   router.post('/', async (req: Request, res: Response) => {
-    const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -105,7 +97,7 @@ export function createFeedbackRouter(
 
   // DELETE /api/feedback/:tmdbId/:mediaType — remove feedback for a title.
   router.delete('/:tmdbId/:mediaType', async (req: Request, res: Response) => {
-    const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -128,7 +120,7 @@ export function createFeedbackRouter(
 
   // DELETE /api/feedback — clear ALL feedback for the current user (requires explicit confirmation).
   router.delete('/', async (req: Request, res: Response) => {
-    const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) return res.status(401).json({ error: 'Unauthorized' });
 
     try {

@@ -13,6 +13,7 @@ export interface AuthSessionResponse {
   authenticated: boolean;
   user: SafeUser | null;
   csrfToken: string | null;
+  sessionToken?: string | null;
 }
 
 export interface AuthIdentity {

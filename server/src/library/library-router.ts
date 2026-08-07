@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import express from 'express';
 
-import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
+import { getSessionTokenFromRequest } from '../auth/auth-request';
+import { AUTH_CSRF_HEADER_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { AuthService } from '../auth/auth-service';
 import type { AppConfig } from '../config/env';
@@ -10,15 +11,6 @@ import type { MediaType } from '../types/recommendations';
 import { logger } from '../utils/logger';
 import type { LibraryRepositoryLike, StoredLibraryTitle } from './library-repository';
 import { libraryActionSchema, libraryStateLookupSchema, paginationSchema } from './library-schemas';
-
-function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(';')) {
-    const [key, ...valueParts] = part.trim().split('=');
-    if (key === name) return decodeURIComponent(valueParts.join('='));
-  }
-  return null;
-}
 
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
   if (!origin || !config.frontendOrigin) return true;
@@ -85,7 +77,7 @@ export function createLibraryRouter(
   });
 
   async function requireIdentity(req: Request, res: Response) {
-    const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
       res.status(401).json({ error: 'Unauthorized' });
       return null;

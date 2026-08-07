@@ -487,4 +487,31 @@ describe('auth router', () => {
     expect(sessionRes.status).toBe(200);
     expect(sessionRes.body.authenticated).toBe(true);
   });
+
+  it('restores session via Authorization bearer token without relying on cookies', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    const verificationToken = readTokenFromUrl(emailService.verificationUrls[0].verificationUrl);
+    await request(app).post('/api/auth/verify-email').set('Origin', 'https://app.example.com').send({ token: verificationToken });
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .set('Origin', 'https://app.example.com')
+      .send({ email: 'user@example.com', password: 'password-password' });
+
+    expect(loginResponse.status).toBe(200);
+    expect(typeof loginResponse.body.sessionToken).toBe('string');
+
+    const bearerSessionResponse = await request(app)
+      .get('/api/auth/session')
+      .set('Origin', 'https://app.example.com')
+      .set('Authorization', `Bearer ${loginResponse.body.sessionToken as string}`);
+
+    expect(bearerSessionResponse.status).toBe(200);
+    expect(bearerSessionResponse.body.authenticated).toBe(true);
+    expect(bearerSessionResponse.body.user.email).toBe('user@example.com');
+  });
 });

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import express from 'express';
 
-import { AUTH_SESSION_COOKIE_NAME } from '../auth/auth-crypto';
+import { getSessionTokenFromRequest } from '../auth/auth-request';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { AuthService } from '../auth/auth-service';
 import type { AppConfig } from '../config/env';
@@ -17,15 +17,6 @@ import { recommendationSchema } from '../schemas/recommendation';
 import { TmdbService } from '../services/tmdb-service';
 import type { RecommendationRequest } from '../types/recommendations';
 import { logger } from '../utils/logger';
-
-function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(';')) {
-    const [key, ...valueParts] = part.trim().split('=');
-    if (key === name) return decodeURIComponent(valueParts.join('='));
-  }
-  return null;
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -72,7 +63,7 @@ async function loadAuthRecommendationContext(
   profileRepo: ProfileRepositoryLike,
   config: AppConfig,
 ): Promise<AuthRecommendationContext | null> {
-  const sessionToken = readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
+  const sessionToken = getSessionTokenFromRequest(req);
   if (!sessionToken) return null;
 
   try {

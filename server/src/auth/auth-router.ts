@@ -4,7 +4,8 @@ import rateLimit from 'express-rate-limit';
 
 import type { AppConfig } from '../config/env';
 import { clearSessionCookie, getSessionCookieOptions, setSessionCookie } from './auth-cookie';
-import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, hashSessionToken, timingSafeStringEqual } from './auth-crypto';
+import { AUTH_CSRF_HEADER_NAME, createCsrfToken, hashSessionToken, timingSafeStringEqual } from './auth-crypto';
+import { getSessionTokenFromRequest } from './auth-request';
 import { emailOnlySchema, loginSchema, registerSchema, resetPasswordSchema, verifyEmailSchema } from './auth-schemas';
 import type { AuthRepositoryLike } from './auth-repository';
 import { AuthService } from './auth-service';
@@ -23,31 +24,12 @@ function buildCookieContext(req: Request) {
   };
 }
 
-function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) {
-    return null;
-  }
-
-  for (const part of cookieHeader.split(';')) {
-    const [key, ...valueParts] = part.trim().split('=');
-    if (key === name) {
-      return decodeURIComponent(valueParts.join('='));
-    }
-  }
-
-  return null;
-}
-
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
   if (!origin || !config.frontendOrigin) {
     return true;
   }
 
   return origin === config.frontendOrigin;
-}
-
-function getSessionTokenFromRequest(req: Request): string | null {
-  return readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
 }
 
 function getCsrfTokenFromRequest(req: Request): string | null {
@@ -86,6 +68,7 @@ function setNoStoreHeaders(res: Response): void {
   res.setHeader('Expires', '0');
   res.append('Vary', 'Origin');
   res.append('Vary', 'Cookie');
+  res.append('Vary', 'Authorization');
 }
 
 export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLike, emailService?: EmailService) {
@@ -218,7 +201,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       }
 
       setSessionCookie(res, result.sessionToken, config, buildCookieContext(req));
-      return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken });
+      return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken, sessionToken: result.sessionToken });
     } catch (error) {
       logAuthRouteError('/login', req, error);
       return res.status(401).json({ error: 'Invalid email or password' });

@@ -2,8 +2,9 @@ import type { Request, Response } from 'express';
 import express from 'express';
 
 import type { AppConfig } from '../config/env';
+import { getSessionTokenFromRequest } from '../auth/auth-request';
 import { AuthService } from '../auth/auth-service';
-import { AUTH_CSRF_HEADER_NAME, AUTH_SESSION_COOKIE_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
+import { AUTH_CSRF_HEADER_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
 import { scoutyAvatarCatalog } from './avatar-catalog';
@@ -24,25 +25,6 @@ function buildDisplayName(firstName: string, lastName: string, displayName: stri
   }
 
   return `${firstName.trim()} ${lastName.trim()}`.trim();
-}
-
-function readCookieHeader(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) {
-    return null;
-  }
-
-  for (const part of cookieHeader.split(';')) {
-    const [key, ...valueParts] = part.trim().split('=');
-    if (key === name) {
-      return decodeURIComponent(valueParts.join('='));
-    }
-  }
-
-  return null;
-}
-
-function getSessionTokenFromRequest(req: Request): string | null {
-  return readCookieHeader(req.headers.cookie, AUTH_SESSION_COOKIE_NAME);
 }
 
 function getCsrfTokenFromRequest(req: Request): string | null {

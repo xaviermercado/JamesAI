@@ -1,4 +1,5 @@
 import { resolveApiBaseUrl } from './api-base-url';
+import { clearAuthSessionToken, getAuthSessionToken } from './auth-session-token';
 
 const API_BASE_URL = resolveApiBaseUrl();
 
@@ -45,19 +46,27 @@ function extractApiErrorMessage(payload: unknown): string {
 }
 
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const sessionToken = getAuthSessionToken();
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (sessionToken) {
+    headers.set('Authorization', `Bearer ${sessionToken}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   });
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const message = extractApiErrorMessage(payload);
     if (response.status === 401) {
+      clearAuthSessionToken();
       notifyUnauthorizedResponse();
     }
     throw new HttpRequestError(message, response.status);
