@@ -86,6 +86,10 @@ function hasScoutyDomain(value: string): boolean {
   return /@scouty\.ca$/i.test(extractEmailAddress(value));
 }
 
+function hasBrevoSmtpDomain(value: string): boolean {
+  return /@smtp-brevo\.com$/i.test(extractEmailAddress(value));
+}
+
 function ensureEmailConfig(env: BaseEnv, emailProvider: AppConfig['emailProvider']): void {
   if (emailProvider !== 'smtp') {
     return;
@@ -108,8 +112,8 @@ function ensureEmailConfig(env: BaseEnv, emailProvider: AppConfig['emailProvider
     throw new Error('EMAIL_FROM must use an authorized @scouty.ca sender identity when SMTP is enabled');
   }
 
-  if (!env.EMAIL_USER || !hasScoutyDomain(env.EMAIL_USER)) {
-    throw new Error('EMAIL_USER must use an authorized @scouty.ca mailbox when SMTP is enabled');
+  if (!env.EMAIL_USER || (!hasScoutyDomain(env.EMAIL_USER) && !hasBrevoSmtpDomain(env.EMAIL_USER))) {
+    throw new Error('EMAIL_USER must use an authorized @scouty.ca mailbox or Brevo SMTP login when SMTP is enabled');
   }
 }
 

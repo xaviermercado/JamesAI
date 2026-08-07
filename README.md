@@ -90,6 +90,7 @@ Root/local frontend and backend development:
 - `EMAIL_USER`
 - `EMAIL_FROM`
 - `EMAIL_API_KEY`
+- `CONTACT_EMAIL_TO`
 
 Email can run in console mode for local development or SMTP mode in production. Console mode prints verification and reset links in the server logs. SMTP mode requires the mail host, port, username, API key or password, and sender address.
 
@@ -102,13 +103,13 @@ Render backend:
 Render email setup:
 
 - Set `EMAIL_PROVIDER=smtp`.
-- Set `EMAIL_HOST=mail.scouty.ca`.
-- Set `EMAIL_PORT=465`.
-- Set `EMAIL_SECURE=true`.
-- Set `EMAIL_USER=do.not.reply@scouty.ca`.
+- Set `EMAIL_HOST=smtp-relay.brevo.com`.
+- Set `EMAIL_PORT=587`.
+- Set `EMAIL_SECURE=false`.
+- Set `EMAIL_USER=<your Brevo SMTP login, for example b4b627001@smtp-brevo.com>`.
 - Set `EMAIL_FROM=Scouty <do.not.reply@scouty.ca>`.
 - Set `CONTACT_EMAIL_TO` to the monitored Scouty inbox that should receive contact-form messages.
-- Set `EMAIL_API_KEY` to the mailbox password in Render only.
+- Set `EMAIL_API_KEY` to the Brevo SMTP key/password in Render only.
 - Keep `EMAIL_PROVIDER=console` for local development if you want verification and reset links printed to the server logs instead of sent by email.
 
 HostGator frontend build:
