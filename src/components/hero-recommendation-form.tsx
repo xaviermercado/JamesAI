@@ -109,16 +109,17 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
               <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
             </Pressable>
           </View>
+        </View>
 
-          <View pointerEvents="none" style={styles.mascotColumn}>
-            <Image
-              source={scoutyHeroMascot}
-              style={styles.mascot}
-              contentFit="contain"
-              accessibilityLabel=""
-              accessible={false}
-            />
-          </View>
+        <View pointerEvents="none" style={styles.mascotColumn}>
+          <Image
+            source={scoutyHeroMascot}
+            style={styles.mascot}
+            contentFit="contain"
+            accessibilityLabel=""
+            accessible={false}
+          />
+        </View>
 
           {showFilters ? (
             <FilterPanel
@@ -136,8 +137,6 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
               onClearAll={() => { props.onClearFilters(); setShowFilters(false); }}
             />
           ) : null}
-        </View>
-
       </View>
     </View>
   );
