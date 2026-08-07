@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
+import { scoutyHeroMascot } from '@/constants/brand';
 import { BrandColors, Fonts, Radii, Spacing } from '@/constants/theme';
 import { getHeroPresentationData, type HeroPresentationData } from '@/features/hero/hero-period';
 import { FilterPanel } from '@/components/filter-panel';
@@ -107,6 +108,16 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
             <Pressable accessibilityRole="button" accessibilityLabel="Find something to watch" style={({ hovered, pressed }) => [styles.primaryButton, hovered && styles.primaryHover, pressed && styles.buttonPressed, props.isLoading && styles.buttonDisabled]} onPress={props.onSubmit} disabled={props.isLoading}>
               <ThemedText style={styles.primaryButtonText}>{props.isLoading ? 'Scouty is searching…' : 'Find something to watch'}</ThemedText>
             </Pressable>
+          </View>
+
+          <View pointerEvents="none" style={styles.mascotColumn}>
+            <Image
+              source={scoutyHeroMascot}
+              style={styles.mascot}
+              contentFit="contain"
+              accessibilityLabel=""
+              accessible={false}
+            />
           </View>
 
           {showFilters ? (
