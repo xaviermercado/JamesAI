@@ -1,7 +1,7 @@
 import { Link, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Dimensions, Modal, Pressable, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
 
 import { PUBLIC_BRAND_NAME, scoutyHeroMascot } from '@/constants/brand';
 import { getScoutyAvatarAsset } from '@/constants/scouty-avatar-assets';
@@ -24,8 +24,13 @@ import { getMyProfile } from '@/services/profile-api';
 const ACCOUNT_MENU_ID = 'scouty-account-menu';
 const ACCOUNT_MENU_WIDTH = 248;
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 export function AppHeader() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { status, csrfToken, clearSession } = useAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountLabel, setAccountLabel] = useState('My account');
@@ -38,6 +43,7 @@ export function AppHeader() {
   const menuPanelRef = useRef<View | null>(null);
   const menuItemRefs = useRef<(View | null)[]>([]);
   const showAccountMenu = shouldShowAccountMenu(status);
+  const isCompactAnonymousMenu = !showAccountMenu && width < 768;
   const menuActions = useMemo(() => getHeaderMenuActions(status), [status]);
 
   const triggerA11yLabel = useMemo(
@@ -94,7 +100,10 @@ export function AppHeader() {
 
     triggerNode.measureInWindow((x, y, width, height) => {
       const viewportWidth = Dimensions.get('window').width;
-      const right = Math.max(8, viewportWidth - (x + width));
+      const panelWidth = Math.min(ACCOUNT_MENU_WIDTH, viewportWidth * 0.92);
+      const preferredRight = viewportWidth - (x + width);
+      const maxRight = Math.max(8, viewportWidth - panelWidth - 8);
+      const right = clamp(preferredRight, 8, maxRight);
       const top = Math.max(8, y + height + 8);
       setMenuPosition({ top, right });
     });
@@ -241,7 +250,7 @@ export function AppHeader() {
             accessibilityLabel={triggerA11yLabel}
             accessibilityState={{ expanded: menuOpen }}
             onPress={onTriggerPress}
-            style={[styles.accountTrigger, !showAccountMenu && styles.mainMenuTrigger]}
+            style={[styles.accountTrigger, !showAccountMenu && styles.mainMenuTrigger, isCompactAnonymousMenu && styles.mainMenuTriggerCompact]}
             testID="account-menu-trigger"
             {...triggerAriaProps}
           >
@@ -265,10 +274,10 @@ export function AppHeader() {
                   <View style={styles.menuIconLine} />
                   <View style={styles.menuIconLine} />
                 </View>
-                <ThemedText style={styles.accountLabel}>Menu</ThemedText>
+                {!isCompactAnonymousMenu ? <ThemedText style={styles.accountLabel}>Menu</ThemedText> : null}
               </>
             )}
-            <ThemedText style={styles.accountChevron}>{menuOpen ? '▲' : '▼'}</ThemedText>
+            {!isCompactAnonymousMenu ? <ThemedText style={styles.accountChevron}>{menuOpen ? '▲' : '▼'}</ThemedText> : null}
           </Pressable>
         </View>
       </View>
@@ -375,6 +384,11 @@ const styles = StyleSheet.create({
   },
   mainMenuTrigger: {
     maxWidth: 170,
+  },
+  mainMenuTriggerCompact: {
+    maxWidth: 56,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.two,
   },
   menuIcon: {
     width: 18,

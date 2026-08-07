@@ -13,7 +13,6 @@ import { resolveAvatarId, SCOUTY_DEFAULT_AVATAR_ID, type ScoutyAvatarId } from '
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { logoutAllAuthDevices, logoutAuthAccount } from '@/services/auth-api';
 import { getMyPreferences, getMyProfile, updateMyPreferences, updateMyProfile } from '@/services/profile-api';
 import type {
   CountryCatalogItem,
@@ -22,7 +21,6 @@ import type {
   ViewingFormatPreference,
 } from '@/types/profile';
 import { editProfileSchema } from '@/features/profile/validation';
-import { clearMyFeedback } from '@/services/feedback-api';
 import { normalizeProfileUsername } from '@/features/profile/username-normalization';
 
 const VIEWING_FORMAT_LABELS: Record<string, string> = {
@@ -46,7 +44,7 @@ function countryFlag(code: string): string {
 
 export default function ProfileSummaryScreen() {
   const router = useRouter();
-  const { csrfToken, clearSession, user } = useAuthSession();
+  const { csrfToken, user } = useAuthSession();
   const [countries, setCountries] = useState<CountryCatalogItem[]>([]);
   const [languages, setLanguages] = useState<LanguageCatalogItem[]>([]);
   const [providerCatalog, setProviderCatalog] = useState<StreamingServiceCatalogItem[]>([]);
@@ -72,9 +70,6 @@ export default function ProfileSummaryScreen() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [clearFeedbackBusy, setClearFeedbackBusy] = useState(false);
-  const [clearFeedbackMessage, setClearFeedbackMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
@@ -121,24 +116,6 @@ export default function ProfileSummaryScreen() {
     void load();
     return () => { active = false; };
   }, []);
-
-  const logOut = async (allDevices: boolean) => {
-    if (!csrfToken) return;
-    setBusy(true);
-    try {
-      if (allDevices) {
-        await logoutAllAuthDevices(csrfToken);
-      } else {
-        await logoutAuthAccount(csrfToken);
-      }
-      clearSession();
-      router.replace('/');
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to sign out right now.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const selectedCountry = countries.find((country) => country.code === marketCode);
   const filteredCountries = useMemo(() => {
@@ -257,20 +234,6 @@ export default function ProfileSummaryScreen() {
 
   const addLanguage = (languageCode: string) => {
     setSelectedLanguageCodes((current) => (current.includes(languageCode) ? current : [...current, languageCode]));
-  };
-
-  const clearFeedback = async () => {
-    if (!csrfToken || clearFeedbackBusy) return;
-    setClearFeedbackBusy(true);
-    setClearFeedbackMessage(null);
-    try {
-      const result = await clearMyFeedback(csrfToken);
-      setClearFeedbackMessage(result.count > 0 ? `Removed feedback from ${result.count} titles.` : 'No saved recommendation feedback was found.');
-    } catch (nextError) {
-      setClearFeedbackMessage(nextError instanceof Error ? nextError.message : 'Unable to clear feedback right now.');
-    } finally {
-      setClearFeedbackBusy(false);
-    }
   };
 
   const profileName = [form.firstName, form.lastName].filter(Boolean).join(' ').trim() || form.displayName || 'Your profile';
@@ -481,29 +444,19 @@ export default function ProfileSummaryScreen() {
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
-            <ThemedText type="smallBold">6. Account and security actions</ThemedText>
+            <ThemedText type="smallBold">6. Save your profile</ThemedText>
             <ThemedText themeColor="textSecondary">Email: {user?.email ?? '—'}</ThemedText>
             <ThemedText themeColor="textSecondary">
               {user?.emailVerifiedAt ? 'Email verified' : 'Email not yet verified'}
             </ThemedText>
             <View style={styles.buttonRow}>
               <Pressable style={[styles.primaryButton, saving && { opacity: 0.65 }]} onPress={() => void saveAll()} disabled={saving}>
-                <ThemedText style={styles.primaryButtonText}>{saving ? 'Saving...' : 'Save profile and preferences'}</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>{saving ? 'Saving...' : 'Save Changes'}</ThemedText>
               </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => router.push('/profile/library' as never)}>
-                <ThemedText style={styles.secondaryButtonText}>Open library</ThemedText>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => void logOut(false)} disabled={busy}>
-                <ThemedText style={styles.secondaryButtonText}>Log out</ThemedText>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => void logOut(true)} disabled={busy}>
-                <ThemedText style={styles.secondaryButtonText}>Log out from all devices</ThemedText>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => void clearFeedback()} disabled={clearFeedbackBusy}>
-                <ThemedText style={styles.secondaryButtonText}>{clearFeedbackBusy ? 'Clearing feedback...' : 'Clear recommendation feedback'}</ThemedText>
+              <Pressable style={styles.secondaryButton} onPress={() => router.replace('/' as never)}>
+                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
               </Pressable>
             </View>
-            {clearFeedbackMessage ? <ThemedText themeColor="textSecondary">{clearFeedbackMessage}</ThemedText> : null}
             {statusMessage ? <ThemedText themeColor="textSecondary">{statusMessage}</ThemedText> : null}
             {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
           </ThemedView>

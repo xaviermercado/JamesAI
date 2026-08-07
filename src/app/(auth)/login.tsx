@@ -1,6 +1,6 @@
 import { Link, Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { AuthActionRow } from '@/components/auth/auth-action-row';
 import { AuthCard, authPrimaryButtonStyle, authPrimaryTextStyle } from '@/components/auth/auth-card';
@@ -19,12 +19,13 @@ export default function LoginScreen() {
   const { status, applySession } = useAuthSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
   if (status === 'authenticated') {
-    return <Redirect href={(redirectTo ?? '/profile') as never} />;
+    return <Redirect href={(redirectTo ?? '/') as never} />;
   }
 
   const submit = async () => {
@@ -45,7 +46,7 @@ export default function LoginScreen() {
     try {
       const session = await loginAuthAccount({ email: parsed.data.email, password: parsed.data.password });
       applySession(session);
-      router.replace((redirectTo ?? '/profile') as never);
+      router.replace((redirectTo ?? '/') as never);
     } catch (error) {
       setFormError(toSafeAuthActionMessage(error, 'Unable to log in right now.'));
     } finally {
@@ -71,10 +72,20 @@ export default function LoginScreen() {
         label="Password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={!passwordVisible}
         autoCapitalize="none"
         textContentType="password"
         autoComplete="current-password"
+        rightAccessory={(
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+            onPress={() => setPasswordVisible((current) => !current)}
+            style={styles.passwordToggle}
+          >
+            <ThemedText style={styles.passwordToggleText}>{passwordVisible ? '🙈' : '👁'}</ThemedText>
+          </Pressable>
+        )}
         error={errors.password}
       />
       <Pressable
@@ -100,3 +111,16 @@ export default function LoginScreen() {
     </AuthCard>
   );
 }
+
+const styles = StyleSheet.create({
+  passwordToggle: {
+    minHeight: 36,
+    minWidth: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+  },
+  passwordToggleText: {
+    fontSize: 18,
+  },
+});
