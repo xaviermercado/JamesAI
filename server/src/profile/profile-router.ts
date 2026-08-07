@@ -8,6 +8,7 @@ import { AUTH_CSRF_HEADER_NAME, createCsrfToken, timingSafeStringEqual } from '.
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
 import { scoutyAvatarCatalog } from './avatar-catalog';
+import { normalizeProfileUsername } from './profile-usernames';
 import type { ProfileRepositoryLike } from './profile-repository';
 import { resolveServiceSelections, toApiProfile } from './profile-repository';
 import {
@@ -142,6 +143,9 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         return res.status(400).json({ error: 'Invalid profile payload' });
       }
 
+      const letterboxdUsername = normalizeProfileUsername('letterboxd', parsed.data.letterboxdUsername);
+      const tvtimeUsername = normalizeProfileUsername('tvtime', parsed.data.tvtimeUsername);
+
       const saved = await profileRepository.upsert(restored.identity.userId, {
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
@@ -149,10 +153,8 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
         countryCode: parsed.data.countryCode,
         viewingFormatPreference: parsed.data.viewingFormatPreference ?? null,
         avatarId: parsed.data.avatarId ?? null,
-        letterboxdUsername: parsed.data.letterboxdUsername ?? null,
-        letterboxdProfileUrl: parsed.data.letterboxdProfileUrl ?? null,
-        tvtimeUsername: parsed.data.tvtimeUsername ?? null,
-        tvtimeProfileUrl: parsed.data.tvtimeProfileUrl ?? null,
+        letterboxdUsername,
+        tvtimeUsername,
       });
 
       return res.json({ profile: toApiProfile(saved) });

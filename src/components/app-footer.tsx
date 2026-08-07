@@ -10,9 +10,10 @@ export function AppFooter() {
     <View style={styles.footerWrap}>
       <View style={styles.footerInner}>
         <View style={styles.linkRow}>
-          <Link href="/about" asChild><ThemedText type="linkPrimary" style={styles.footerLink}>About</ThemedText></Link>
-          <Link href="/privacy" asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Privacy</ThemedText></Link>
-          <Link href="/terms" asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Terms</ThemedText></Link>
+          <Link href={'/about' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>About</ThemedText></Link>
+          <Link href={'/contact' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Contact</ThemedText></Link>
+          <Link href={'/privacy' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Privacy</ThemedText></Link>
+          <Link href={'/terms' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Terms</ThemedText></Link>
         </View>
         <ThemedText themeColor="textSecondary" style={styles.footerCopy}>{ENGINE_CREDIT}</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.footerCopy}>© {new Date().getFullYear()} {PUBLIC_BRAND_NAME}</ThemedText>

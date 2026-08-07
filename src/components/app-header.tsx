@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, usePathname } from 'expo-router';
 import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
@@ -7,7 +7,7 @@ import { BrandColors, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants
 import { useAuthSession } from '@/components/auth-session-provider';
 import { ThemedText } from '@/components/themed-text';
 
-function navButtonStyle(kind: 'primary' | 'ghost') {
+function navButtonStyle(kind: 'primary' | 'ghost', active = false) {
   return ({ hovered, pressed }: { hovered: boolean; pressed: boolean }) => ({
     borderRadius: Radii.pill,
     paddingHorizontal: Spacing.three,
@@ -15,15 +15,28 @@ function navButtonStyle(kind: 'primary' | 'ghost') {
     minHeight: 44,
     backgroundColor: kind === 'primary' ? BrandColors.scoutyCoral : 'transparent',
     borderWidth: kind === 'ghost' ? 1 : 0,
-    borderColor: kind === 'ghost' ? 'rgba(255,255,255,0.2)' : 'transparent',
+    borderColor: kind === 'ghost' ? (active ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)') : 'transparent',
+    ...(kind === 'ghost' && active ? { backgroundColor: 'rgba(255,255,255,0.14)' } : {}),
     opacity: pressed ? 0.9 : 1,
     transform: [{ translateY: hovered && Platform.OS === 'web' ? -1 : 0 }],
   });
 }
 
 export function AppHeader() {
+  const pathname = usePathname();
   const { status } = useAuthSession();
-  const profileLabel = 'Profile';
+
+  const authenticatedLinks = [
+    { href: '/profile/library', label: 'Library', ariaLabel: 'Open your library' },
+    { href: '/profile', label: 'Profile', ariaLabel: 'Open your profile' },
+  ];
+
+  const publicLinks = [
+    { href: '/about', label: 'About', ariaLabel: 'About Scouty' },
+    { href: '/contact', label: 'Contact', ariaLabel: 'Contact Scouty' },
+  ];
+
+  const links = status === 'authenticated' ? authenticatedLinks : publicLinks;
 
   return (
     <View style={styles.headerWrap}>
@@ -36,20 +49,18 @@ export function AppHeader() {
         </Link>
 
         <View style={styles.actionsRow}>
-          {status === 'authenticated' ? (
-            <>
-              <Link href={'/profile/library' as never} asChild>
-                <Pressable accessibilityRole="link" accessibilityLabel="Open your library" style={navButtonStyle('ghost')}>
-                  <ThemedText style={styles.ghostText}>Library</ThemedText>
+          {links.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link key={item.href} href={item.href as never} asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel={item.ariaLabel} accessibilityState={active ? { selected: true } : undefined} style={navButtonStyle('ghost', active)}>
+                  <ThemedText style={styles.ghostText}>{item.label}</ThemedText>
                 </Pressable>
               </Link>
-              <Link href={'/profile' as never} asChild>
-                <Pressable accessibilityRole="link" accessibilityLabel="Open your profile" style={navButtonStyle('ghost')}>
-                  <ThemedText style={styles.ghostText}>{profileLabel}</ThemedText>
-                </Pressable>
-              </Link>
-            </>
-          ) : (
+            );
+          })}
+
+          {status !== 'authenticated' ? (
             <>
               <Link href="/login" asChild>
                 <Pressable accessibilityRole="link" accessibilityLabel="Log in" style={navButtonStyle('ghost')}>
@@ -62,8 +73,11 @@ export function AppHeader() {
                 </Pressable>
               </Link>
             </>
-          )}
+          ) : null}
         </View>
+      </View>
+      <View style={styles.sublineWrap}>
+        <ThemedText style={styles.sublineText}>Friendly picks, saved preferences, and your library in one place.</ThemedText>
       </View>
     </View>
   );
@@ -120,5 +134,15 @@ const styles = StyleSheet.create({
     color: BrandColors.surface,
     fontFamily: Fonts.display,
     fontWeight: '700',
+  },
+  sublineWrap: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingTop: Spacing.two,
+  },
+  sublineText: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 13,
   },
 });

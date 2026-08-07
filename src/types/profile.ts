@@ -35,9 +35,7 @@ export interface UpdateUserProfileInput {
   viewingFormatPreference?: ViewingFormatPreference | null;
   avatarId?: ScoutyAvatarId | null;
   letterboxdUsername?: string | null;
-  letterboxdProfileUrl?: string | null;
   tvtimeUsername?: string | null;
-  tvtimeProfileUrl?: string | null;
 }
 
 export interface AvatarCatalogItem {

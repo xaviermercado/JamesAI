@@ -1,6 +1,8 @@
-import { useWindowDimensions, View } from 'react-native';
+import { useRef } from 'react';
+import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { RecommendationCard } from '@/components/recommendation-card';
+import { ThemedText } from '@/components/themed-text';
 import type { LibraryAction, LibraryStatus } from '@/types/library';
 import type { MovieRecommendation } from '@/types/recommendations';
 
@@ -34,34 +36,72 @@ export function RecommendationGrid({
   feedbackDisabled,
 }: RecommendationGridProps) {
   const { width } = useWindowDimensions();
-  const gap = 24;
-  // Outer mainColumn has 24px padding on each side.
-  const containerPadding = 48;
-  const availableWidth = Math.max(width - containerPadding, 280);
-  const columns = availableWidth >= 1300 ? 4 : availableWidth >= 860 ? 2 : 1;
-  const cardWidth = columns === 1
-    ? availableWidth
-    : Math.floor((availableWidth - gap * (columns - 1)) / columns);
+  const scrollerRef = useRef<ScrollView | null>(null);
+  const scrollXRef = useRef(0);
+  const gap = 12;
+  const cardWidth = width >= 1440 ? 250 : width >= 1280 ? 230 : width >= 1024 ? 210 : width >= 768 ? 195 : 180;
+  const scrollBy = cardWidth * 4;
 
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
-      {recommendations.map((recommendation) => (
-        <View key={`${recommendation.mediaType}:${recommendation.tmdbMovieId}`} style={{ width: cardWidth, minWidth: 0 }}>
-          <RecommendationCard
-            recommendation={recommendation}
-            selectedAction={feedbackById[recommendation.tmdbMovieId]}
-            onAction={onAction}
-            onRemoveFeedback={onRemoveFeedback}
-            libraryStatus={libraryStatusByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`] ?? null}
-            onLibraryAction={onLibraryAction}
-            librarySubmitting={Boolean(librarySubmittingByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`])}
-            libraryErrorMessage={libraryErrorByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`] ?? null}
-            feedbackSubmitting={Boolean(feedbackSubmittingById?.[recommendation.tmdbMovieId])}
-            feedbackErrorMessage={feedbackErrorById?.[recommendation.tmdbMovieId] ?? null}
-            feedbackDisabled={feedbackDisabled}
-          />
+    <View style={{ gap: 10 }}>
+      {width >= 1024 ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scroll recommendations left"
+            style={{ minHeight: 44, borderRadius: 999, paddingHorizontal: 14, justifyContent: 'center', borderWidth: 1, borderColor: '#d4deef', backgroundColor: '#fff' }}
+            onPress={() => {
+              const nextX = Math.max(0, scrollXRef.current - scrollBy);
+              scrollerRef.current?.scrollTo({ x: nextX, animated: true });
+            }}
+          >
+            <ThemedText>Back</ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scroll recommendations right"
+            style={{ minHeight: 44, borderRadius: 999, paddingHorizontal: 14, justifyContent: 'center', borderWidth: 1, borderColor: '#d4deef', backgroundColor: '#fff' }}
+            onPress={() => {
+              const nextX = scrollXRef.current + scrollBy;
+              scrollerRef.current?.scrollTo({ x: nextX, animated: true });
+            }}
+          >
+            <ThemedText>Next</ThemedText>
+          </Pressable>
         </View>
-      ))}
+      ) : null}
+      <ScrollView
+        ref={scrollerRef}
+        horizontal
+        showsHorizontalScrollIndicator
+        contentContainerStyle={{ flexDirection: 'row', gap, paddingBottom: 4 }}
+        style={{ width: '100%' }}
+        snapToInterval={cardWidth + gap}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        onScroll={(event) => {
+          scrollXRef.current = event.nativeEvent.contentOffset.x;
+        }}
+        scrollEventThrottle={16}
+      >
+        {recommendations.map((recommendation) => (
+          <View key={`${recommendation.mediaType}:${recommendation.tmdbMovieId}`} style={{ width: cardWidth, minWidth: cardWidth }}>
+            <RecommendationCard
+              recommendation={recommendation}
+              selectedAction={feedbackById[recommendation.tmdbMovieId]}
+              onAction={onAction}
+              onRemoveFeedback={onRemoveFeedback}
+              libraryStatus={libraryStatusByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`] ?? null}
+              onLibraryAction={onLibraryAction}
+              librarySubmitting={Boolean(librarySubmittingByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`])}
+              libraryErrorMessage={libraryErrorByKey?.[`${recommendation.mediaType}:${recommendation.tmdbMovieId}`] ?? null}
+              feedbackSubmitting={Boolean(feedbackSubmittingById?.[recommendation.tmdbMovieId])}
+              feedbackErrorMessage={feedbackErrorById?.[recommendation.tmdbMovieId] ?? null}
+              feedbackDisabled={feedbackDisabled}
+            />
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 }

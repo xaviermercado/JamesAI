@@ -142,9 +142,9 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
       avatar_url: null,
       avatar_id: input.avatarId ?? null,
       letterboxd_username: input.letterboxdUsername,
-      letterboxd_profile_url: input.letterboxdProfileUrl,
+      letterboxd_profile_url: null,
       tvtime_username: input.tvtimeUsername,
-      tvtime_profile_url: input.tvtimeProfileUrl,
+      tvtime_profile_url: null,
     };
     this.profiles.set(userId, profile);
     return profile;

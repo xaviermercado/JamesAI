@@ -22,9 +22,7 @@ export const editProfileSchema = z.object({
   displayName: z.string().trim().max(80, 'Must be 80 characters or fewer').optional(),
   countryCode: z.string().trim().toUpperCase().refine((code) => allowedCountryCodes.has(code), 'Use a supported 2-letter country code'),
   letterboxdUsername: z.string().trim().max(100).optional(),
-  letterboxdProfileUrl: z.string().trim().url('Enter a valid URL').max(2048).optional().or(z.literal('')),
   tvtimeUsername: z.string().trim().max(100).optional(),
-  tvtimeProfileUrl: z.string().trim().url('Enter a valid URL').max(2048).optional().or(z.literal('')),
 });
 
 export type EditProfileValues = z.infer<typeof editProfileSchema>;

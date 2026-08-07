@@ -36,7 +36,7 @@ export function RecommendationCard({
   feedbackErrorMessage,
 }: RecommendationCardProps) {
   const { width } = useWindowDimensions();
-  const isMobile = width < 768;
+  const isCompact = width < 1280;
 
   const metadata = [
     recommendation.releaseYear ? String(recommendation.releaseYear) : null,
@@ -51,7 +51,7 @@ export function RecommendationCard({
       <MoviePoster title={recommendation.title} posterUrl={recommendation.posterUrl} rating={recommendation.tmdbRating} />
 
       <View style={styles.content}>
-        <ThemedText type="smallBold" style={[styles.title, isMobile && styles.titleMobile]}>
+        <ThemedText type="smallBold" numberOfLines={2} style={[styles.title, isCompact && styles.titleCompact]}>
           {recommendation.title}
         </ThemedText>
 
@@ -77,7 +77,7 @@ export function RecommendationCard({
 
         <View style={styles.reasonBlock}>
           <ThemedText type="smallBold" style={styles.reasonLabel}>Why Scouty picked it</ThemedText>
-          <ThemedText style={styles.explanation}>{recommendation.explanation}</ThemedText>
+          <ThemedText style={styles.explanation} numberOfLines={4}>{recommendation.explanation}</ThemedText>
         </View>
 
         <View style={styles.providerRow}>
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Radii.large,
     flexDirection: 'column',
-    gap: Spacing.three,
-    padding: Spacing.three,
+    gap: Spacing.two,
+    padding: Spacing.two,
     borderWidth: 1,
     borderColor: BrandColors.border,
     boxShadow: '0 10px 30px rgba(11, 22, 51, 0.08)',
@@ -191,13 +191,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    fontSize: 20,
-    lineHeight: 26,
-    color: BrandColors.midnight900,
-  },
-  titleMobile: {
     fontSize: 17,
     lineHeight: 22,
+    color: BrandColors.midnight900,
+  },
+  titleCompact: {
+    fontSize: 16,
+    lineHeight: 21,
   },
   metaRow: {
     flexDirection: 'row',
@@ -235,8 +235,8 @@ const styles = StyleSheet.create({
     color: BrandColors.scoutyBlue,
   },
   explanation: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   providerRow: {
     flexDirection: 'row',

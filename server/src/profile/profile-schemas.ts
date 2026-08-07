@@ -7,8 +7,7 @@ export { streamingServiceCatalog } from './reference-data';
 
 export const MAX_SELECTED_PROVIDERS = 10;
 
-const optionalUrl = z.string().trim().url().max(2048).nullable();
-const optionalName = z.string().trim().max(100).nullable();
+const optionalUsernameInput = z.string().trim().max(256).nullable();
 const optionalDisplayName = z.string().trim().max(80).nullable();
 const personalName = z
   .string()
@@ -50,10 +49,8 @@ export const updateProfileSchema = z.object({
   displayName: optionalDisplayName.optional(),
   countryCode: marketCodeSchema,
   avatarId: avatarIdSchema.nullable().optional(),
-  letterboxdUsername: optionalName.optional(),
-  letterboxdProfileUrl: optionalUrl.optional(),
-  tvtimeUsername: optionalName.optional(),
-  tvtimeProfileUrl: optionalUrl.optional(),
+  letterboxdUsername: optionalUsernameInput.optional(),
+  tvtimeUsername: optionalUsernameInput.optional(),
   viewingFormatPreference: z.enum(viewingFormatPreferenceValues).nullable().optional(),
 }).strict();
 

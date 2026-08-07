@@ -16,7 +16,7 @@ export default function AboutScreen() {
         <ScrollView contentContainerStyle={styles.contentContainer}>
           <View style={styles.card}>
             <ThemedText type="subtitle">About {PUBLIC_BRAND_NAME}</ThemedText>
-            <ThemedText themeColor="textSecondary">Scouty.ca helps you discover what to watch next with a friendlier movie-night experience.</ThemedText>
+            <ThemedText themeColor="textSecondary">Scouty.ca is powered by FrostApps.ca.</ThemedText>
             <ThemedText themeColor="textSecondary">{ENGINE_CREDIT}</ThemedText>
           </View>
           <AppFooter />

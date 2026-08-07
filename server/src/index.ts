@@ -17,6 +17,7 @@ import { createLibraryRouter } from './library/library-router';
 import { createRecommendationsRouter } from './routes/recommendations';
 import { OpenAiService } from './services/openai-service';
 import { TmdbService } from './services/tmdb-service';
+import { createContactRouter } from './contact/contact-router';
 import { logger } from './utils/logger';
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
+app.use('/api/contact', createContactRouter(config));
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
   const startedAt = Date.now();

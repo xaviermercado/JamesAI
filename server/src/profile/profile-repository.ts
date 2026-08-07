@@ -3,6 +3,7 @@ import type { Pool } from 'mysql2';
 import type { ViewingFormatPreference } from './profile-schemas';
 import { streamingServiceCatalog } from './reference-data';
 import { resolveStoredAvatarId, type ScoutyAvatarId } from './avatar-catalog';
+import { buildLetterboxdProfileUrl } from './profile-usernames';
 
 type PromisePool = ReturnType<Pool['promise']>;
 
@@ -30,9 +31,7 @@ export interface UpsertProfileInput {
   viewingFormatPreference?: ViewingFormatPreference | null;
   avatarId?: ScoutyAvatarId | null;
   letterboxdUsername: string | null;
-  letterboxdProfileUrl: string | null;
   tvtimeUsername: string | null;
-  tvtimeProfileUrl: string | null;
 }
 
 export interface StoredStreamingService {
@@ -108,9 +107,9 @@ export class ProfileRepository implements ProfileRepositoryLike {
          viewing_format_preference = VALUES(viewing_format_preference),
          avatar_id = VALUES(avatar_id),
          letterboxd_username = VALUES(letterboxd_username),
-         letterboxd_profile_url = VALUES(letterboxd_profile_url),
+        letterboxd_profile_url = NULL,
          tvtime_username = VALUES(tvtime_username),
-         tvtime_profile_url = VALUES(tvtime_profile_url),
+        tvtime_profile_url = NULL,
          updated_at = NOW(3)`,
       [
         userId,
@@ -121,9 +120,9 @@ export class ProfileRepository implements ProfileRepositoryLike {
         input.viewingFormatPreference ?? null,
         input.avatarId ?? null,
         input.letterboxdUsername,
-        input.letterboxdProfileUrl,
+        null,
         input.tvtimeUsername,
-        input.tvtimeProfileUrl,
+        null,
       ],
     );
 
@@ -274,9 +273,9 @@ export function toApiProfile(profile: StoredProfile): ApiProfile {
     personalizationEnabled: profile.personalization_enabled !== 0,
     avatarId: resolveStoredAvatarId(profile.avatar_id),
     letterboxdUsername: profile.letterboxd_username,
-    letterboxdProfileUrl: profile.letterboxd_profile_url,
+    letterboxdProfileUrl: buildLetterboxdProfileUrl(profile.letterboxd_username),
     tvtimeUsername: profile.tvtime_username,
-    tvtimeProfileUrl: profile.tvtime_profile_url,
+    tvtimeProfileUrl: null,
   };
 }
 

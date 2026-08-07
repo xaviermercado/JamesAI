@@ -113,7 +113,7 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
 
   async findByUserId(userId: string) { return this.profiles.get(userId) ?? null; }
   async upsert(userId: string, input: UpsertProfileInput): Promise<StoredProfile> {
-    const p: StoredProfile = { user_id: userId, first_name: input.firstName, last_name: input.lastName, display_name: input.displayName, country_code: input.countryCode, viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, avatar_id: input.avatarId ?? null, letterboxd_username: input.letterboxdUsername, letterboxd_profile_url: input.letterboxdProfileUrl, tvtime_username: input.tvtimeUsername, tvtime_profile_url: input.tvtimeProfileUrl };
+    const p: StoredProfile = { user_id: userId, first_name: input.firstName, last_name: input.lastName, display_name: input.displayName, country_code: input.countryCode, viewing_format_preference: null, personalization_enabled: 1, avatar_url: null, avatar_id: input.avatarId ?? null, letterboxd_username: input.letterboxdUsername, letterboxd_profile_url: null, tvtime_username: input.tvtimeUsername, tvtime_profile_url: null };
     this.profiles.set(userId, p); return p;
   }
   async listStreamingServices(_userId: string) { return this.services; }
