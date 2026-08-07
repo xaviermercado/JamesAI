@@ -80,6 +80,14 @@ function logAuthRouteError(route: string, req: Request, error: unknown): void {
   });
 }
 
+function setNoStoreHeaders(res: Response): void {
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.append('Vary', 'Origin');
+  res.append('Vary', 'Cookie');
+}
+
 export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLike, emailService?: EmailService) {
   const router = express.Router();
   const authService = new AuthService(repository, config, emailService);
@@ -102,6 +110,10 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
   });
 
   router.use((req, res, next) => {
+    if (req.path === '/session' || req.path === '/login' || req.path === '/logout' || req.path === '/logout-all') {
+      setNoStoreHeaders(res);
+    }
+
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !isAllowedOrigin(req.headers.origin, config)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
