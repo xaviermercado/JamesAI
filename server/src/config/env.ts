@@ -2,6 +2,21 @@ import { z } from 'zod';
 
 const mysqlSslModeSchema = z.enum(['disabled', 'preferred', 'verify-ca', 'verify-full']);
 
+const envBooleanSchema = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean());
+
 const baseEnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   NODE_ENV: z.string().trim().optional().default('development'),
@@ -17,7 +32,7 @@ const baseEnvSchema = z.object({
   EMAIL_PROVIDER: z.enum(['console', 'smtp']).optional(),
   EMAIL_HOST: z.string().trim().min(1).optional(),
   EMAIL_PORT: z.coerce.number().int().min(1).max(65535).optional(),
-  EMAIL_SECURE: z.coerce.boolean().optional(),
+  EMAIL_SECURE: envBooleanSchema.optional(),
   EMAIL_USER: z.string().trim().min(1).optional(),
   EMAIL_API_KEY: z.string().trim().optional(),
   EMAIL_FROM: z.string().trim().min(1).optional(),

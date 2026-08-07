@@ -84,6 +84,34 @@ describe('loadAppConfig', () => {
     expect(config.emailFrom).toBe('Scouty <do.not.reply@scouty.ca>');
   });
 
+  it('parses EMAIL_SECURE=false as boolean false', () => {
+    const config = loadAppConfig({
+      NODE_ENV: 'production',
+      EMAIL_PROVIDER: 'smtp',
+      EMAIL_HOST: 'smtp-relay.brevo.com',
+      EMAIL_PORT: '587',
+      EMAIL_SECURE: 'false',
+      EMAIL_USER: 'b4b627001@smtp-brevo.com',
+      EMAIL_API_KEY: 'smtp-secret',
+      EMAIL_FROM: 'Scouty <do.not.reply@scouty.ca>',
+      CONTACT_EMAIL_TO: 'support@scouty.ca',
+      EMAIL_TOKEN_PEPPER: 'y'.repeat(32),
+      MYSQL_HOST: 'db.example.com',
+      MYSQL_PORT: '3306',
+      MYSQL_DATABASE: 'jamesai',
+      MYSQL_USER: 'app_user',
+      MYSQL_PASSWORD: 'secret-value',
+      MYSQL_SSL_MODE: 'verify-full',
+      MYSQL_SSL_CA: '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----',
+      DATABASE_CONNECTION_LIMIT: '5',
+      SESSION_TOKEN_PEPPER: 'x'.repeat(32),
+      FRONTEND_ORIGIN: 'https://app.example.com',
+      APP_BASE_URL: 'https://app.example.com',
+    });
+
+    expect(config.emailSecure).toBe(false);
+  });
+
   it('rejects smtp mode when the contact recipient is missing', () => {
     expect(() =>
       loadAppConfig({
