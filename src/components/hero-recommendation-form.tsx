@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { scoutyHeroMascot } from '@/constants/brand';
+import { getScoutyAvatarAsset } from '@/constants/scouty-avatar-assets';
 import { BrandColors, Fonts, Radii, Spacing } from '@/constants/theme';
 import { getHeroPresentationData, type HeroPresentationData } from '@/features/hero/hero-period';
 import { FilterPanel } from '@/components/filter-panel';
@@ -90,51 +90,65 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
             </View>
           ) : null}
 
-          <TextInput
-            accessibilityLabel="What do you wanna watch?"
-            multiline
-            numberOfLines={isMobile ? 3 : 4}
-            value={props.description}
-            onChangeText={props.onDescriptionChange}
-            placeholder={isMobile ? "Tell Scouty what you're in the mood for\u2026" : "I'm in the mood for something\u2026"}
-            placeholderTextColor="#6d86c7"
-            style={[styles.promptInputBase, isMobile ? styles.promptInputMobile : styles.promptInputDesktop]}
-          />
+          <View style={[styles.promptWithMascotRow, isMobile ? styles.promptWithMascotRowMobile : styles.promptWithMascotRowDesktop]}>
+            <View style={styles.promptColumn}>
+              <TextInput
+                accessibilityLabel="What do you wanna watch?"
+                multiline
+                numberOfLines={isMobile ? 3 : 4}
+                value={props.description}
+                onChangeText={props.onDescriptionChange}
+                placeholder={isMobile ? "Tell Scouty what you're in the mood for\u2026" : "I'm in the mood for something\u2026"}
+                placeholderTextColor="#6d86c7"
+                style={[styles.promptInputBase, isMobile ? styles.promptInputMobile : styles.promptInputDesktop]}
+              />
 
-          <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open filters"
-              style={({ hovered, pressed }) => [
-                styles.filterButtonBase,
-                isMobile ? styles.filterButtonMobile : styles.filterButtonDesktop,
-                hovered && styles.secondaryHover,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => setShowFilters((c) => !c)}
-            >
-              <ThemedText style={isMobile ? styles.buttonTextMobile : styles.filterButtonTextDesktop}>
-                {activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}
-              </ThemedText>
-            </Pressable>
+              <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Find something to watch"
+                  style={({ hovered, pressed }) => [
+                    styles.primaryButtonBase,
+                    isMobile ? styles.primaryButtonMobile : styles.primaryButtonDesktop,
+                    hovered && styles.primaryHover,
+                    pressed && styles.buttonPressed,
+                    props.isLoading && styles.buttonDisabled,
+                  ]}
+                  onPress={props.onSubmit}
+                  disabled={props.isLoading}
+                >
+                  <ThemedText style={isMobile ? styles.primaryButtonTextMobile : styles.primaryButtonTextDesktop}>
+                    {props.isLoading ? 'Scouty is searching...' : 'Find something to watch'}
+                  </ThemedText>
+                </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Find something to watch"
-              style={({ hovered, pressed }) => [
-                styles.primaryButtonBase,
-                isMobile ? styles.primaryButtonMobile : styles.primaryButtonDesktop,
-                hovered && styles.primaryHover,
-                pressed && styles.buttonPressed,
-                props.isLoading && styles.buttonDisabled,
-              ]}
-              onPress={props.onSubmit}
-              disabled={props.isLoading}
-            >
-              <ThemedText style={isMobile ? styles.primaryButtonTextMobile : styles.primaryButtonTextDesktop}>
-                {props.isLoading ? 'Scouty is searching\u2026' : 'Find something to watch'}
-              </ThemedText>
-            </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open filters"
+                  style={({ hovered, pressed }) => [
+                    styles.filterButtonBase,
+                    isMobile ? styles.filterButtonMobile : styles.filterButtonDesktop,
+                    hovered && styles.secondaryHover,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => setShowFilters((c) => !c)}
+                >
+                  <ThemedText style={isMobile ? styles.buttonTextMobile : styles.filterButtonTextDesktop}>
+                    {activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+
+            <View pointerEvents="none" style={isMobile ? styles.mascotColumnMobile : styles.mascotColumnDesktop}>
+              <Image
+                source={getScoutyAvatarAsset('binoculars')}
+                style={isMobile ? styles.mascotMobile : styles.mascotDesktop}
+                contentFit="contain"
+                accessibilityLabel=""
+                accessible={false}
+              />
+            </View>
           </View>
 
           {showFilters ? (
@@ -155,15 +169,6 @@ export function HeroRecommendationForm(props: HeroRecommendationFormProps) {
           ) : null}
         </View>
 
-        <View pointerEvents="none" style={isMobile ? styles.mascotColumnMobile : styles.mascotColumnDesktop}>
-          <Image
-            source={scoutyHeroMascot}
-            style={isMobile ? styles.mascotMobile : styles.mascotDesktop}
-            contentFit="contain"
-            accessibilityLabel=""
-            accessible={false}
-          />
-        </View>
       </View>
     </View>
   );
@@ -174,15 +179,19 @@ const styles = StyleSheet.create({
   heroBackground: { ...StyleSheet.absoluteFill },
   heroOverlay: { ...StyleSheet.absoluteFill },
   heroInner: { flexDirection: 'row', width: '100%', minWidth: 0 },
-  heroInnerDesktop: { flexWrap: 'nowrap', justifyContent: 'space-between', alignItems: 'flex-end', padding: 40, gap: Spacing.four, minHeight: 520 },
-  heroInnerMobile: { flexDirection: 'column', flexWrap: 'nowrap', padding: 20, paddingBottom: 0, gap: Spacing.three },
-  contentColumnDesktop: { flexShrink: 1, flexGrow: 1, flexBasis: 0, maxWidth: 760, gap: Spacing.three, zIndex: 1, minWidth: 0 },
-  contentColumnMobile: { width: '100%', minWidth: 0, gap: Spacing.two, zIndex: 1 },
+  heroInnerDesktop: { flexWrap: 'nowrap', justifyContent: 'space-between', alignItems: 'center', padding: 40, gap: Spacing.four, minHeight: 520 },
+  heroInnerMobile: { flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'flex-start', justifyContent: 'space-between', padding: 16, gap: Spacing.two },
+  contentColumnDesktop: { flexShrink: 1, flexGrow: 0, flexBasis: '58%', width: '58%', maxWidth: 740, gap: Spacing.three, zIndex: 1, minWidth: 0 },
+  contentColumnMobile: { flexShrink: 1, flexGrow: 1, flexBasis: 0, minWidth: 0, gap: Spacing.two, zIndex: 1 },
   titleBase: { color: BrandColors.surface },
   titleDesktop: { fontSize: 72, lineHeight: 76, maxWidth: 620 },
   titleMobile: { fontSize: 36, lineHeight: 40 },
   subtitleDesktop: { color: BrandColors.surface, fontSize: 18, lineHeight: 30, maxWidth: 520 },
   subtitleMobile: { color: BrandColors.surface, fontSize: 15, lineHeight: 22 },
+  promptWithMascotRow: { width: '100%', minWidth: 0 },
+  promptWithMascotRowDesktop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  promptWithMascotRowMobile: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two },
+  promptColumn: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: Spacing.two },
   prefBanner: {
     backgroundColor: 'rgba(52,120,246,0.18)',
     borderRadius: Radii.medium,
@@ -196,22 +205,23 @@ const styles = StyleSheet.create({
   promptInputDesktop: { minHeight: 92, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three, fontSize: 18 },
   promptInputMobile: { minHeight: 120, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, fontSize: 16 },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, minWidth: 0 },
+  actionRowDesktop: { flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'flex-start', gap: Spacing.two },
   actionRowMobile: { flexDirection: 'column', flexWrap: 'nowrap', gap: 12 },
   filterButtonBase: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.48)', backgroundColor: 'rgba(7, 21, 47, 0.16)', minHeight: 52 },
-  filterButtonDesktop: { minWidth: 160, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
+  filterButtonDesktop: { minWidth: 120, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
   filterButtonMobile: { width: '100%', paddingHorizontal: Spacing.three, paddingVertical: 14 },
   filterButtonTextDesktop: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 18 },
   buttonTextMobile: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 17, textAlign: 'center' },
   primaryButtonBase: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center', backgroundColor: BrandColors.scoutyBlue, minHeight: 52 },
-  primaryButtonDesktop: { minWidth: 280, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
+  primaryButtonDesktop: { minWidth: 190, paddingHorizontal: Spacing.four, paddingVertical: Spacing.three },
   primaryButtonMobile: { width: '100%', paddingHorizontal: Spacing.three, paddingVertical: 14 },
   primaryButtonTextDesktop: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 20, textAlign: 'center' },
   primaryButtonTextMobile: { color: BrandColors.surface, fontFamily: Fonts.display, fontWeight: '700', fontSize: 17, textAlign: 'center' },
   buttonDisabled: { opacity: 0.65 },
-  mascotColumnDesktop: { flexShrink: 0, width: 380, alignItems: 'flex-end', justifyContent: 'flex-end', alignSelf: 'flex-end' },
-  mascotColumnMobile: { width: '100%', alignItems: 'center', marginTop: Spacing.three },
-  mascotDesktop: { width: 380, height: 420 },
-  mascotMobile: { width: '68%', maxWidth: 280, aspectRatio: 0.8 },
+  mascotColumnDesktop: { flexShrink: 0, width: 300, alignItems: 'flex-end', justifyContent: 'center', alignSelf: 'center', backgroundColor: 'transparent' },
+  mascotColumnMobile: { width: 112, alignItems: 'flex-end', justifyContent: 'flex-start', alignSelf: 'flex-start', marginBottom: 0, flexShrink: 0, backgroundColor: 'transparent' },
+  mascotDesktop: { width: 300, height: 320, backgroundColor: 'transparent' },
+  mascotMobile: { width: 112, height: 136, backgroundColor: 'transparent' },
   primaryHover: { backgroundColor: '#2b6bf1' },
   secondaryHover: { backgroundColor: 'rgba(255,255,255,0.12)' },
   buttonPressed: { opacity: 0.92 },
