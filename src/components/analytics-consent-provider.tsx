@@ -4,7 +4,7 @@ import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { analytics, type AnalyticsConsent } from '@/services/analytics';
+import { analytics, resolveInitialAnalyticsConsent, type AnalyticsConsent } from '@/services/analytics';
 
 const STORAGE_KEY = 'scouty.analytics-consent.v1';
 
@@ -29,14 +29,17 @@ export function AnalyticsConsentProvider({ children }: { children: ReactNode }) 
   const pathname = usePathname();
   const [consent, setConsent] = useState<AnalyticsConsent>('unset');
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const hydrationTimer = window.setTimeout(() => {
       const stored = readStoredConsent();
-      setConsent(stored);
-      analytics.setConsent(stored);
+      const initialConsent = resolveInitialAnalyticsConsent(stored);
+      setConsent(initialConsent);
+      setNoticeOpen(stored === 'unset');
+      analytics.setConsent(initialConsent);
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
@@ -59,21 +62,22 @@ export function AnalyticsConsentProvider({ children }: { children: ReactNode }) 
     }
     analytics.setConsent(nextConsent);
     setConsent(nextConsent);
+    setNoticeOpen(false);
     setPreferencesOpen(false);
   };
 
   return (
     <AnalyticsConsentContext.Provider value={{ consent, openPreferences: () => setPreferencesOpen(true) }}>
       {children}
-      {Platform.OS === 'web' && hydrated && consent === 'unset' ? (
+      {Platform.OS === 'web' && hydrated && noticeOpen ? (
         <View accessibilityRole="alert" style={styles.banner}>
           <View style={styles.bannerInner}>
             <View style={styles.copyBlock}>
               <ThemedText type="subtitle" style={styles.lightText}>Analytics preferences</ThemedText>
-              <ThemedText style={styles.bodyText}>Scouty uses optional Google Analytics only with your permission. Your choice does not affect recommendations or account features.</ThemedText>
+              <ThemedText style={styles.bodyText}>Scouty uses Google Analytics by default to understand aggregate site usage. You can opt out now or anytime without affecting recommendations or account features.</ThemedText>
             </View>
             <View style={styles.actions}>
-              <ConsentButton label="Accept analytics" onPress={() => choose('accepted')} />
+              <ConsentButton label="Keep analytics" onPress={() => choose('accepted')} />
               <ConsentButton label="Decline analytics" onPress={() => choose('declined')} />
             </View>
           </View>

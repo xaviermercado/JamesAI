@@ -33,9 +33,9 @@ EXPO_PUBLIC_SITE_INDEXING_ENABLED=true
 
 ## Consent design
 
-Consent begins as unset and GA is not present in static HTML. The first-party local-storage key `scouty.analytics-consent.v1` stores only `accepted` or `declined`; it is separate from authentication cookies. The banner gives equal Accept analytics and Decline analytics controls. The footer opens the same preferences later. Withdrawal sends denied consent, activates GA's disable flag, stops future events, and attempts to delete `_ga` and `_ga_*` first-party cookies. Browser/domain rules may prevent deleting every previously created cookie.
+GA is not present in static HTML. In the browser, a visitor without a stored choice defaults to `accepted` and sees a notice with Keep analytics and Decline analytics controls. The first-party local-storage key `scouty.analytics-consent.v1` stores the acknowledged `accepted` or `declined` choice; it is separate from authentication cookies. An explicit stored choice remains authoritative, and the footer opens the same preferences later. Withdrawal sends denied consent, activates GA's disable flag, stops future events, and attempts to delete `_ga` and `_ga_*` first-party cookies. Browser/domain rules may prevent deleting every previously created cookie.
 
-GA loads only in a browser after acceptance, when `NODE_ENV=production`, the enabled flag is exactly `true`, and the ID matches `G-...`. Initialization is single-flight, page paths are allowlisted, query strings/fragments are discarded, and duplicate route views are suppressed.
+GA loads only in a browser when consent resolves to the default or stored `accepted` state, `NODE_ENV=production`, the enabled flag is exactly `true`, and the ID matches `G-...`. Initialization is single-flight, page paths are allowlisted, query strings/fragments are discarded, and duplicate route views are suppressed.
 
 ## External GA4 allowlist
 
@@ -103,9 +103,9 @@ Public pages receive unique titles, descriptions, Open Graph basics, and absolut
 3. In GA4 enhanced measurement, disable site search, form interactions, outbound-click collection, and any feature that could collect user-controlled URLs or form/search content. Keep Google Signals, advertising personalization, remarketing, and ad features disabled.
 4. Review the production Privacy page and consent UI with the owner/legal reviewer before enabling analytics.
 5. Build with `npm run export:web`, then deploy through the normal HostGator process. Run migration `0009` through the normal migration command before server instrumentation is enabled.
-6. In a clean browser, verify before consent that there is no `googletagmanager.com` request, `_ga` cookie, `dataLayer`, or GA event.
-7. Accept analytics and verify one loader/configuration plus one initial page view and one sanitized page view per SPA navigation in GA4 DebugView or Realtime.
-8. Decline or withdraw and verify that future GA requests stop. Confirm first-party `_ga` cookies are removed where browser rules permit.
+6. In a clean browser without stored preferences, verify that the analytics notice appears and that GA initializes with one loader/configuration, one initial page view, and one sanitized page view per SPA navigation in GA4 DebugView or Realtime.
+7. Choose Keep analytics and verify the accepted choice persists without duplicate initialization or page views.
+8. Decline or withdraw and verify that future GA events stop. Confirm first-party `_ga` cookies are removed where browser rules permit and the declined choice persists after reload.
 9. Inspect requests and confirm no payload contains PII, raw prompts, tokens, full URLs, titles, private identifiers, messages, or error text.
 10. Create or open the Google Search Console domain property for `scouty.ca`.
 11. Obtain Google's Search Console TXT verification value and add that exact TXT record at the authoritative DNS provider identified from the domain's nameservers.

@@ -38,6 +38,12 @@ interface AnalyticsConfiguration {
   measurementId: string | null;
 }
 
+export function resolveInitialAnalyticsConsent(
+  storedConsent: AnalyticsConsent,
+): Exclude<AnalyticsConsent, 'unset'> {
+  return storedConsent === 'declined' ? 'declined' : 'accepted';
+}
+
 type SafeParameters = Record<string, string | boolean | number>;
 
 const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{6,20}$/;
@@ -172,7 +178,8 @@ function deleteGoogleAnalyticsCookies(): void {
 class BrowserGtagTransport implements AnalyticsTransport {
   async initialize(measurementId: string): Promise<void> {
     if (typeof window === 'undefined' || typeof document === 'undefined') throw new Error('Analytics requires a browser');
-    const analyticsWindow = window as typeof window & { dataLayer?: unknown[][]; gtag?: (...args: unknown[]) => void };
+    const analyticsWindow = window as typeof window & { dataLayer?: unknown[][]; gtag?: (...args: unknown[]) => void; [key: string]: unknown };
+    analyticsWindow[`ga-disable-${measurementId}`] = false;
     if (!analyticsWindow.gtag) {
       analyticsWindow.dataLayer = analyticsWindow.dataLayer ?? [];
       analyticsWindow.gtag = (...args: unknown[]) => { analyticsWindow.dataLayer?.push(args); };

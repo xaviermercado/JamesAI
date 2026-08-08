@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   AnalyticsClient,
+  resolveInitialAnalyticsConsent,
   resolveAnalyticsConfiguration,
   type AnalyticsEventMap,
   type AnalyticsEventName,
@@ -30,6 +31,12 @@ function createEnabledClient(transport = new FakeTransport()) {
 }
 
 describe('analytics configuration', () => {
+  it('defaults first-time visitors to accepted while preserving stored choices', () => {
+    expect(resolveInitialAnalyticsConsent('unset')).toBe('accepted');
+    expect(resolveInitialAnalyticsConsent('accepted')).toBe('accepted');
+    expect(resolveInitialAnalyticsConsent('declined')).toBe('declined');
+  });
+
   it('is disabled by default outside explicitly enabled production', () => {
     expect(resolveAnalyticsConfiguration({ nodeEnv: 'production', measurementId: 'G-TEST123456' }).enabled).toBe(false);
     expect(resolveAnalyticsConfiguration({ nodeEnv: 'development', enabled: 'true', measurementId: 'G-TEST123456' }).enabled).toBe(false);
