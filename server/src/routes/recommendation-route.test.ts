@@ -13,6 +13,7 @@ import type {
   StoredSession,
   StoredUser,
 } from '../auth/auth-repository';
+import type { LetterboxdRepositoryLike, LetterboxdSeenTitleKey, StoredLetterboxdSettings } from '../letterboxd/letterboxd-repository';
 import type { LibraryRepositoryLike, ListLibraryInput, StoredLibraryTitle } from '../library/library-repository';
 import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from '../profile/profile-repository';
 import { createRecommendationsRouter } from '../routes/recommendations';
@@ -167,6 +168,38 @@ class InMemoryLibraryRepository implements LibraryRepositoryLike {
   }
 }
 
+class InMemoryLetterboxdRepository implements LetterboxdRepositoryLike {
+  seenByUser = new Map<string, LetterboxdSeenTitleKey[]>();
+
+  async getSettings(_userId: string): Promise<StoredLetterboxdSettings | null> {
+    return null;
+  }
+
+  async setPublicActivityEnabled(_userId: string, _enabled: boolean): Promise<StoredLetterboxdSettings> {
+    throw new Error('not needed in this test');
+  }
+
+  async markRssNotModified(_userId: string): Promise<void> {}
+
+  async replaceRssTitles(_userId: string): Promise<void> {}
+
+  async markRssError(_userId: string): Promise<void> {}
+
+  async replaceExportTitles(_userId: string): Promise<void> {}
+
+  async clearExportTitles(_userId: string): Promise<number> {
+    return 0;
+  }
+
+  async listSeenTitleKeys(userId: string): Promise<LetterboxdSeenTitleKey[]> {
+    return this.seenByUser.get(userId) ?? [];
+  }
+
+  async countTitlesBySource(_userId: string): Promise<{ rssCount: number; exportCount: number }> {
+    return { rssCount: 0, exportCount: 0 };
+  }
+}
+
 function createAuthenticatedSession(authRepo: InMemoryAuthRepository, config: AppConfig, userId = '11111111-1111-4111-8111-111111111111') {
   const now = new Date();
   authRepo.users.set(userId, { user_id: userId, email: 'user@example.com', password_hash: 'ignored', email_verified_at: now, account_status: 'active', created_at: now, updated_at: now });
@@ -180,6 +213,7 @@ describe('recommendations route', () => {
   let authRepo: InMemoryAuthRepository;
   let profileRepo: InMemoryProfileRepository;
   let libraryRepo: InMemoryLibraryRepository;
+  let letterboxdRepo: InMemoryLetterboxdRepository;
   let tmdb: StubTmdbService;
   let app: express.Express;
   const config = createConfig();
@@ -188,10 +222,11 @@ describe('recommendations route', () => {
     authRepo = new InMemoryAuthRepository();
     profileRepo = new InMemoryProfileRepository();
     libraryRepo = new InMemoryLibraryRepository();
+    letterboxdRepo = new InMemoryLetterboxdRepository();
     tmdb = new StubTmdbService();
     app = express();
     app.use(express.json());
-    app.use('/api', createRecommendationsRouter(tmdb as unknown as TmdbService, config, authRepo, profileRepo, null, libraryRepo));
+    app.use('/api', createRecommendationsRouter(tmdb as unknown as TmdbService, config, authRepo, profileRepo, null, libraryRepo, letterboxdRepo));
   });
 
   it('returns 400 for empty description', async () => {
@@ -449,5 +484,90 @@ describe('recommendations route', () => {
 
     const req = tmdb.lastRequest as Record<string, unknown>;
     expect(req.excludedMovieIds).toEqual([5]);
+  });
+
+  it('suppresses recommendations that already exist in Letterboxd seen history', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    letterboxdRepo.seenByUser.set(session.userId, [{ normalizedTitle: 'prime-first candidate', releaseYear: 2024 }]);
+
+    tmdb.nextRecommendations = [
+      {
+        tmdbMovieId: 1,
+        title: 'Prime-first candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Prime Video'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'x',
+      },
+      {
+        tmdbMovieId: 2,
+        title: 'Netflix candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Netflix'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'y',
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'suggest a movie night pick' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recommendations).toHaveLength(1);
+    expect(res.body.recommendations[0].tmdbMovieId).toBe(2);
+  });
+
+  it('keeps Letterboxd-seen titles when rewatch intent is explicit', async () => {
+    const session = createAuthenticatedSession(authRepo, config);
+    letterboxdRepo.seenByUser.set(session.userId, [{ normalizedTitle: 'prime-first candidate', releaseYear: 2024 }]);
+
+    tmdb.nextRecommendations = [
+      {
+        tmdbMovieId: 1,
+        title: 'Prime-first candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Prime Video'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'x',
+      },
+      {
+        tmdbMovieId: 2,
+        title: 'Netflix candidate',
+        posterUrl: '',
+        releaseYear: 2024,
+        runtimeMinutes: 100,
+        tmdbRating: 7,
+        genres: [],
+        providers: ['Netflix'],
+        country: 'US',
+        mediaType: 'movie',
+        explanation: 'y',
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/recommendations')
+      .set('Cookie', session.cookie)
+      .send({ description: 'rewatch something great' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recommendations).toHaveLength(2);
   });
 });

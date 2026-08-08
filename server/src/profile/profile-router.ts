@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import express from 'express';
+import { z } from 'zod';
 
 import type { AppConfig } from '../config/env';
 import { getSessionTokenFromRequest } from '../auth/auth-request';
@@ -7,6 +8,8 @@ import { AuthService } from '../auth/auth-service';
 import { AUTH_CSRF_HEADER_NAME, createCsrfToken, timingSafeStringEqual } from '../auth/auth-crypto';
 import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
+import type { LetterboxdRepositoryLike, StoredLetterboxdSettings } from '../letterboxd/letterboxd-repository';
+import { fetchAndParseLetterboxdRss } from '../letterboxd/letterboxd-rss';
 import { scoutyAvatarCatalog } from './avatar-catalog';
 import { normalizeProfileUsername } from './profile-usernames';
 import type { ProfileRepositoryLike } from './profile-repository';
@@ -70,7 +73,38 @@ function toProviderIdSet(items: Array<{ providerId: number }>): Set<number> {
   return new Set(items.map((item) => item.providerId));
 }
 
-export function createProfileRouter(config: AppConfig, authRepository: AuthRepositoryLike, profileRepository: ProfileRepositoryLike) {
+const updateLetterboxdSettingsSchema = z.object({
+  publicActivityEnabled: z.boolean(),
+}).strict();
+
+function toIso(value: Date | null | undefined): string | null {
+  return value instanceof Date ? value.toISOString() : null;
+}
+
+function toLetterboxdStatusPayload(
+  settings: StoredLetterboxdSettings | null,
+  counts: { rssCount: number; exportCount: number },
+  username: string | null,
+) {
+  return {
+    enabled: settings?.public_activity_enabled === 1,
+    rssStatus: settings?.rss_status ?? 'idle',
+    lastCheckedAt: toIso(settings?.rss_last_checked_at),
+    lastSuccessfulRefreshAt: toIso(settings?.rss_last_success_at),
+    lastErrorCode: settings?.rss_last_error_code ?? null,
+    lastErrorMessage: settings?.rss_last_error_message ?? null,
+    rssCount: counts.rssCount,
+    exportCount: counts.exportCount,
+    username,
+  };
+}
+
+export function createProfileRouter(
+  config: AppConfig,
+  authRepository: AuthRepositoryLike,
+  profileRepository: ProfileRepositoryLike,
+  letterboxdRepository?: LetterboxdRepositoryLike | null,
+) {
   const router = express.Router();
   const authService = new AuthService(authRepository, config);
 
@@ -386,6 +420,162 @@ export function createProfileRouter(config: AppConfig, authRepository: AuthRepos
     } catch (error) {
       logProfileRouteError('/preferences', req, error);
       return res.status(500).json({ error: 'Unable to save preferences right now' });
+    }
+  });
+
+  router.get('/letterboxd/status', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (!letterboxdRepository) {
+      return res.status(503).json({ error: 'Letterboxd features are not available right now' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { userId } = restored.identity;
+      const [profile, settings, counts] = await Promise.all([
+        profileRepository.findByUserId(userId),
+        letterboxdRepository.getSettings(userId),
+        letterboxdRepository.countTitlesBySource(userId),
+      ]);
+
+      return res.json({
+        status: toLetterboxdStatusPayload(settings, counts, profile?.letterboxd_username ?? null),
+      });
+    } catch (error) {
+      logProfileRouteError('/letterboxd/status', req, error);
+      return res.status(500).json({ error: 'Unable to load Letterboxd status right now' });
+    }
+  });
+
+  router.patch('/letterboxd/settings', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (!letterboxdRepository) {
+      return res.status(503).json({ error: 'Letterboxd features are not available right now' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (!requireCsrf(req, res, restored.identity.sessionTokenHash, config)) {
+        return undefined;
+      }
+
+      const parsed = updateLetterboxdSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      }
+
+      const { userId } = restored.identity;
+      await letterboxdRepository.setPublicActivityEnabled(userId, parsed.data.publicActivityEnabled);
+
+      const [profile, settings, counts] = await Promise.all([
+        profileRepository.findByUserId(userId),
+        letterboxdRepository.getSettings(userId),
+        letterboxdRepository.countTitlesBySource(userId),
+      ]);
+
+      return res.json({
+        status: toLetterboxdStatusPayload(settings, counts, profile?.letterboxd_username ?? null),
+      });
+    } catch (error) {
+      logProfileRouteError('/letterboxd/settings', req, error);
+      return res.status(500).json({ error: 'Unable to update Letterboxd settings right now' });
+    }
+  });
+
+  router.post('/letterboxd/refresh', async (req, res) => {
+    const sessionToken = getSessionTokenFromRequest(req);
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (!letterboxdRepository) {
+      return res.status(503).json({ error: 'Letterboxd features are not available right now' });
+    }
+
+    try {
+      const restored = await authService.restoreSession(sessionToken);
+      if (!restored.authenticated || !restored.identity) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (!requireCsrf(req, res, restored.identity.sessionTokenHash, config)) {
+        return undefined;
+      }
+
+      const { userId } = restored.identity;
+      const [profile, settings] = await Promise.all([
+        profileRepository.findByUserId(userId),
+        letterboxdRepository.getSettings(userId),
+      ]);
+
+      const username = profile?.letterboxd_username ?? null;
+      if (!username) {
+        return res.status(400).json({ error: 'Add a Letterboxd username to your profile first' });
+      }
+      if (settings?.public_activity_enabled !== 1) {
+        return res.status(409).json({ error: 'Enable public activity sync before refreshing' });
+      }
+
+      const rssResult = await fetchAndParseLetterboxdRss(username, {
+        etag: settings?.rss_etag ?? null,
+        lastModified: settings?.rss_last_modified ?? null,
+      });
+
+      if (rssResult.status === 'error') {
+        await letterboxdRepository.markRssError(
+          userId,
+          rssResult.errorCode ?? 'rss_refresh_failed',
+          rssResult.errorMessage ?? 'Unable to refresh Letterboxd activity',
+        );
+
+        const [nextSettings, counts] = await Promise.all([
+          letterboxdRepository.getSettings(userId),
+          letterboxdRepository.countTitlesBySource(userId),
+        ]);
+
+        return res.status(502).json({
+          error: rssResult.errorMessage ?? 'Unable to refresh Letterboxd activity',
+          status: toLetterboxdStatusPayload(nextSettings, counts, username),
+        });
+      }
+
+      if (rssResult.status === 'not_modified') {
+        await letterboxdRepository.markRssNotModified(userId, {
+          etag: rssResult.etag ?? settings?.rss_etag ?? null,
+          lastModified: rssResult.lastModified ?? settings?.rss_last_modified ?? null,
+        });
+      } else {
+        await letterboxdRepository.replaceRssTitles(userId, rssResult.titles, {
+          etag: rssResult.etag ?? null,
+          lastModified: rssResult.lastModified ?? null,
+        });
+      }
+
+      const [nextSettings, counts] = await Promise.all([
+        letterboxdRepository.getSettings(userId),
+        letterboxdRepository.countTitlesBySource(userId),
+      ]);
+
+      return res.json({
+        refreshed: true,
+        changed: rssResult.status === 'ok',
+        importedCount: rssResult.status === 'ok' ? rssResult.titles.length : 0,
+        status: toLetterboxdStatusPayload(nextSettings, counts, username),
+      });
+    } catch (error) {
+      logProfileRouteError('/letterboxd/refresh', req, error);
+      return res.status(500).json({ error: 'Unable to refresh Letterboxd activity right now' });
     }
   });
 

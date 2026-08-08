@@ -15,6 +15,7 @@ import { createFeedbackRouter } from './feedback/feedback-router';
 import { LibraryRepository } from './library/library-repository';
 import { createLibraryRouter } from './library/library-router';
 import { createRecommendationsRouter } from './routes/recommendations';
+import { LetterboxdRepository } from './letterboxd/letterboxd-repository';
 import { OpenAiService } from './services/openai-service';
 import { TmdbService } from './services/tmdb-service';
 import { createContactRouter } from './contact/contact-router';
@@ -40,6 +41,7 @@ const authRepository = databaseConnection ? new AuthRepository(databaseConnectio
 const profileRepository = databaseConnection ? new ProfileRepository(databaseConnection.pool) : null;
 const feedbackRepository = databaseConnection ? new FeedbackRepository(databaseConnection.pool) : null;
 const libraryRepository = databaseConnection ? new LibraryRepository(databaseConnection.pool) : null;
+const letterboxdRepository = databaseConnection ? new LetterboxdRepository(databaseConnection.pool) : null;
 
 app.use(cors({
   origin: config.frontendOrigin ?? true,
@@ -101,7 +103,7 @@ if (authRepository) {
   app.use('/api/auth', createAuthRouter(config, authRepository));
 
   if (profileRepository) {
-    app.use('/api/profile', createProfileRouter(config, authRepository, profileRepository));
+    app.use('/api/profile', createProfileRouter(config, authRepository, profileRepository, letterboxdRepository));
   }
 
   if (feedbackRepository) {
@@ -141,7 +143,7 @@ if (authRepository) {
   });
 }
 
-app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository));
+app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository, letterboxdRepository));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });

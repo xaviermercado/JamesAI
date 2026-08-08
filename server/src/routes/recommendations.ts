@@ -6,7 +6,9 @@ import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { AuthService } from '../auth/auth-service';
 import type { AppConfig } from '../config/env';
 import { type FeedbackRepositoryLike } from '../feedback/feedback-repository';
+import type { LetterboxdRepositoryLike } from '../letterboxd/letterboxd-repository';
 import { type LibraryRepositoryLike } from '../library/library-repository';
+import { buildSeenTitleKey } from '../letterboxd/title-normalization';
 import { streamingServiceCatalog } from '../profile/reference-data';
 import type { ProfileRepositoryLike } from '../profile/profile-repository';
 import { applyPersonalizedRanking } from '../recommendations/personalized-ranking';
@@ -103,6 +105,7 @@ export function createRecommendationsRouter(
   profileRepo?: ProfileRepositoryLike | null,
   feedbackRepo?: FeedbackRepositoryLike | null,
   libraryRepo?: LibraryRepositoryLike | null,
+  letterboxdRepo?: LetterboxdRepositoryLike | null,
 ) {
   const router = express.Router();
 
@@ -158,6 +161,23 @@ export function createRecommendationsRouter(
 
       const result = await tmdbService.getRecommendations(payload);
       let personalizedRecommendations = result.recommendations;
+
+      if (authContext && letterboxdRepo && !hasExplicitRewatchIntent(parsed.data.description)) {
+        try {
+          const seenTitles = await letterboxdRepo.listSeenTitleKeys(authContext.userId, 2500);
+          if (seenTitles.length > 0) {
+            const seenSet = new Set(
+              seenTitles.map((title) => buildSeenTitleKey(title.normalizedTitle, title.releaseYear)),
+            );
+            personalizedRecommendations = personalizedRecommendations.filter((recommendation) => {
+              const key = buildSeenTitleKey(recommendation.title, recommendation.releaseYear ?? null);
+              return !seenSet.has(key);
+            });
+          }
+        } catch (error) {
+          logger.error('recommendations.letterboxd_suppression_failed', { error });
+        }
+      }
 
       // Apply saved provider order as a soft tie-breaker only when saved provider preferences are active.
       if (effective.source.providers === 'saved' && effective.effectiveProviderIds && effective.effectiveProviderIds.length > 0) {

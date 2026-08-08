@@ -13,6 +13,7 @@ import type {
   StoredSession,
   StoredUser,
 } from '../auth/auth-repository';
+import type { LetterboxdRepositoryLike, LetterboxdSeenTitleKey, StoredLetterboxdSettings } from '../letterboxd/letterboxd-repository';
 import { createProfileRouter } from './profile-router';
 import { scoutyAvatarCatalog } from './avatar-catalog';
 import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from './profile-repository';
@@ -185,6 +186,102 @@ class InMemoryProfileRepository implements ProfileRepositoryLike {
   }
 }
 
+class InMemoryLetterboxdRepository implements LetterboxdRepositoryLike {
+  settingsByUser = new Map<string, StoredLetterboxdSettings>();
+  titleCountsByUser = new Map<string, { rssCount: number; exportCount: number }>();
+  seenByUser = new Map<string, LetterboxdSeenTitleKey[]>();
+  nextRefreshMode: 'ok' | 'error' | 'not_modified' = 'ok';
+
+  async getSettings(userId: string): Promise<StoredLetterboxdSettings | null> {
+    return this.settingsByUser.get(userId) ?? null;
+  }
+
+  async setPublicActivityEnabled(userId: string, enabled: boolean): Promise<StoredLetterboxdSettings> {
+    const existing = this.settingsByUser.get(userId);
+    const next: StoredLetterboxdSettings = {
+      user_id: userId,
+      public_activity_enabled: enabled ? 1 : 0,
+      rss_status: existing?.rss_status ?? 'idle',
+      rss_last_checked_at: existing?.rss_last_checked_at ?? null,
+      rss_last_success_at: existing?.rss_last_success_at ?? null,
+      rss_last_error_code: existing?.rss_last_error_code ?? null,
+      rss_last_error_message: existing?.rss_last_error_message ?? null,
+      rss_etag: existing?.rss_etag ?? null,
+      rss_last_modified: existing?.rss_last_modified ?? null,
+    };
+    this.settingsByUser.set(userId, next);
+    return next;
+  }
+
+  async markRssNotModified(userId: string, metadata: { etag?: string | null; lastModified?: string | null }): Promise<void> {
+    const current = this.settingsByUser.get(userId);
+    this.settingsByUser.set(userId, {
+      user_id: userId,
+      public_activity_enabled: current?.public_activity_enabled ?? 1,
+      rss_status: 'ok',
+      rss_last_checked_at: new Date(),
+      rss_last_success_at: new Date(),
+      rss_last_error_code: null,
+      rss_last_error_message: null,
+      rss_etag: metadata.etag ?? current?.rss_etag ?? null,
+      rss_last_modified: metadata.lastModified ?? current?.rss_last_modified ?? null,
+    });
+  }
+
+  async replaceRssTitles(userId: string, titles: Array<{ normalizedTitle: string; releaseYear: number | null }>, metadata: { etag?: string | null; lastModified?: string | null }): Promise<void> {
+    this.seenByUser.set(
+      userId,
+      titles.map((item) => ({ normalizedTitle: item.normalizedTitle, releaseYear: item.releaseYear })),
+    );
+    const counts = this.titleCountsByUser.get(userId) ?? { rssCount: 0, exportCount: 0 };
+    this.titleCountsByUser.set(userId, { ...counts, rssCount: titles.length });
+
+    const current = this.settingsByUser.get(userId);
+    this.settingsByUser.set(userId, {
+      user_id: userId,
+      public_activity_enabled: current?.public_activity_enabled ?? 1,
+      rss_status: 'ok',
+      rss_last_checked_at: new Date(),
+      rss_last_success_at: new Date(),
+      rss_last_error_code: null,
+      rss_last_error_message: null,
+      rss_etag: metadata.etag ?? null,
+      rss_last_modified: metadata.lastModified ?? null,
+    });
+  }
+
+  async markRssError(userId: string, code: string, message: string): Promise<void> {
+    const current = this.settingsByUser.get(userId);
+    this.settingsByUser.set(userId, {
+      user_id: userId,
+      public_activity_enabled: current?.public_activity_enabled ?? 1,
+      rss_status: 'error',
+      rss_last_checked_at: new Date(),
+      rss_last_success_at: current?.rss_last_success_at ?? null,
+      rss_last_error_code: code,
+      rss_last_error_message: message,
+      rss_etag: current?.rss_etag ?? null,
+      rss_last_modified: current?.rss_last_modified ?? null,
+    });
+  }
+
+  async replaceExportTitles(_userId: string): Promise<void> {}
+
+  async clearExportTitles(userId: string): Promise<number> {
+    const counts = this.titleCountsByUser.get(userId) ?? { rssCount: 0, exportCount: 0 };
+    this.titleCountsByUser.set(userId, { ...counts, exportCount: 0 });
+    return 0;
+  }
+
+  async listSeenTitleKeys(userId: string): Promise<LetterboxdSeenTitleKey[]> {
+    return this.seenByUser.get(userId) ?? [];
+  }
+
+  async countTitlesBySource(userId: string): Promise<{ rssCount: number; exportCount: number }> {
+    return this.titleCountsByUser.get(userId) ?? { rssCount: 0, exportCount: 0 };
+  }
+}
+
 function createConfig(): AppConfig {
   return {
     port: 3001,
@@ -236,22 +333,24 @@ function createAuthenticatedSession(repo: InMemoryAuthRepository, config: AppCon
   };
 }
 
-function createApp(authRepo: InMemoryAuthRepository, profileRepo: InMemoryProfileRepository) {
+function createApp(authRepo: InMemoryAuthRepository, profileRepo: InMemoryProfileRepository, letterboxdRepo?: InMemoryLetterboxdRepository | null) {
   const app = express();
   app.use(express.json());
-  app.use('/api/profile', createProfileRouter(createConfig(), authRepo, profileRepo));
+  app.use('/api/profile', createProfileRouter(createConfig(), authRepo, profileRepo, letterboxdRepo ?? null));
   return app;
 }
 
 describe('profile router', () => {
   let authRepo: InMemoryAuthRepository;
   let profileRepo: InMemoryProfileRepository;
+  let letterboxdRepo: InMemoryLetterboxdRepository;
   let app: express.Express;
 
   beforeEach(() => {
     authRepo = new InMemoryAuthRepository();
     profileRepo = new InMemoryProfileRepository();
-    app = createApp(authRepo, profileRepo);
+    letterboxdRepo = new InMemoryLetterboxdRepository();
+    app = createApp(authRepo, profileRepo, letterboxdRepo);
   });
 
   it('returns 401 without session cookie', async () => {
@@ -854,5 +953,73 @@ describe('profile router', () => {
     const user2Profile = await request(app).get('/api/profile').set('Origin', 'https://app.example.com').set('Cookie', cookie2);
     expect(user2Profile.status).toBe(200);
     expect(user2Profile.body.profile).toBeNull();
+  });
+
+  it('returns letterboxd status for authenticated user', async () => {
+    const session = createAuthenticatedSession(authRepo, createConfig());
+
+    profileRepo.profiles.set(session.userId, {
+      user_id: session.userId,
+      first_name: 'Test',
+      last_name: 'User',
+      display_name: 'Test User',
+      country_code: 'US',
+      viewing_format_preference: null,
+      personalization_enabled: 1,
+      avatar_url: null,
+      avatar_id: null,
+      letterboxd_username: 'jamesletter',
+      letterboxd_profile_url: null,
+      tvtime_username: null,
+      tvtime_profile_url: null,
+    });
+    await letterboxdRepo.setPublicActivityEnabled(session.userId, true);
+
+    const response = await request(app)
+      .get('/api/profile/letterboxd/status')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.status.enabled).toBe(true);
+    expect(response.body.status.username).toBe('jamesletter');
+  });
+
+  it('requires csrf for letterboxd settings update', async () => {
+    const session = createAuthenticatedSession(authRepo, createConfig());
+    const response = await request(app)
+      .patch('/api/profile/letterboxd/settings')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .send({ publicActivityEnabled: true });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('updates letterboxd settings with csrf', async () => {
+    const session = createAuthenticatedSession(authRepo, createConfig());
+
+    const response = await request(app)
+      .patch('/api/profile/letterboxd/settings')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken)
+      .send({ publicActivityEnabled: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status.enabled).toBe(true);
+  });
+
+  it('fails letterboxd refresh when username is missing', async () => {
+    const session = createAuthenticatedSession(authRepo, createConfig());
+    await letterboxdRepo.setPublicActivityEnabled(session.userId, true);
+
+    const response = await request(app)
+      .post('/api/profile/letterboxd/refresh')
+      .set('Origin', 'https://app.example.com')
+      .set('Cookie', session.cookie)
+      .set('X-CSRF-Token', session.csrfToken);
+
+    expect(response.status).toBe(400);
   });
 });

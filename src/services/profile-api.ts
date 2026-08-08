@@ -1,4 +1,5 @@
 import type {
+  LetterboxdSyncStatus,
   ContentLanguageSelection,
   PreferencesCatalog,
   StreamingServiceCatalogItem,
@@ -76,4 +77,36 @@ export async function getProviderCatalogForCountry(countryCode: string): Promise
     availabilityKnown: boolean;
     providers: StreamingServiceCatalogItem[];
   }>(`/api/profile/providers?${query.toString()}`, { method: 'GET' });
+}
+
+export async function getLetterboxdStatus(): Promise<{ status: LetterboxdSyncStatus }> {
+  return requestJson<{ status: LetterboxdSyncStatus }>('/api/profile/letterboxd/status', { method: 'GET' });
+}
+
+export async function updateLetterboxdSettings(
+  publicActivityEnabled: boolean,
+  csrfToken?: string | null,
+): Promise<{ status: LetterboxdSyncStatus }> {
+  return requestJson<{ status: LetterboxdSyncStatus }>('/api/profile/letterboxd/settings', {
+    method: 'PATCH',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+    body: JSON.stringify({ publicActivityEnabled }),
+  });
+}
+
+export async function refreshLetterboxdActivity(csrfToken?: string | null): Promise<{
+  refreshed: boolean;
+  changed: boolean;
+  importedCount: number;
+  status: LetterboxdSyncStatus;
+}> {
+  return requestJson<{
+    refreshed: boolean;
+    changed: boolean;
+    importedCount: number;
+    status: LetterboxdSyncStatus;
+  }>('/api/profile/letterboxd/refresh', {
+    method: 'POST',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+  });
 }

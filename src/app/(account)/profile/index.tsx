@@ -13,9 +13,18 @@ import { resolveAvatarId, SCOUTY_DEFAULT_AVATAR_ID, type ScoutyAvatarId } from '
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { getMyPreferences, getMyProfile, updateMyPreferences, updateMyProfile } from '@/services/profile-api';
+import {
+  getLetterboxdStatus,
+  getMyPreferences,
+  getMyProfile,
+  refreshLetterboxdActivity,
+  updateLetterboxdSettings,
+  updateMyPreferences,
+  updateMyProfile,
+} from '@/services/profile-api';
 import type {
   CountryCatalogItem,
+  LetterboxdSyncStatus,
   LanguageCatalogItem,
   StreamingServiceCatalogItem,
   ViewingFormatPreference,
@@ -68,6 +77,8 @@ export default function ProfileSummaryScreen() {
   const [languageSearch, setLanguageSearch] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [letterboxdStatus, setLetterboxdStatus] = useState<LetterboxdSyncStatus | null>(null);
+  const [letterboxdBusy, setLetterboxdBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +90,11 @@ export default function ProfileSummaryScreen() {
       setLoading(true);
       setError(null);
       try {
-        const [profileResponse, prefsResponse] = await Promise.all([getMyProfile(), getMyPreferences()]);
+        const [profileResponse, prefsResponse, letterboxdResponse] = await Promise.all([
+          getMyProfile(),
+          getMyPreferences(),
+          getLetterboxdStatus(),
+        ]);
         if (!active) return;
         setCountries(prefsResponse.catalog.countries);
         setLanguages(prefsResponse.catalog.languages);
@@ -105,6 +120,7 @@ export default function ProfileSummaryScreen() {
             .sort((a, b) => a.sortOrder - b.sortOrder)
             .map((language) => language.languageCode),
         );
+        setLetterboxdStatus(letterboxdResponse.status);
       } catch (nextError) {
         if (!active) return;
         setError(nextError instanceof Error ? nextError.message : 'Unable to load your profile right now.');
@@ -237,6 +253,57 @@ export default function ProfileSummaryScreen() {
   };
 
   const profileName = [form.firstName, form.lastName].filter(Boolean).join(' ').trim() || form.displayName || 'Your profile';
+  const letterboxdStatusText = letterboxdStatus
+    ? letterboxdStatus.rssStatus === 'ok'
+      ? 'Public activity synced'
+      : letterboxdStatus.rssStatus === 'error'
+        ? 'Last refresh failed'
+        : 'No refresh run yet'
+    : 'Loading sync status...';
+
+  const toggleLetterboxdSync = async () => {
+    if (!csrfToken || letterboxdBusy || !letterboxdStatus) {
+      return;
+    }
+    setLetterboxdBusy(true);
+    setError(null);
+    try {
+      const response = await updateLetterboxdSettings(!letterboxdStatus.enabled, csrfToken);
+      setLetterboxdStatus(response.status);
+      setStatusMessage(response.status.enabled ? 'Letterboxd public sync enabled.' : 'Letterboxd public sync disabled.');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to update Letterboxd sync settings right now.');
+    } finally {
+      setLetterboxdBusy(false);
+    }
+  };
+
+  const refreshLetterboxd = async () => {
+    if (!csrfToken || letterboxdBusy) {
+      return;
+    }
+    setLetterboxdBusy(true);
+    setError(null);
+    try {
+      const response = await refreshLetterboxdActivity(csrfToken);
+      setLetterboxdStatus(response.status);
+      setStatusMessage(
+        response.changed
+          ? `Letterboxd refreshed. Imported ${response.importedCount} watched title${response.importedCount === 1 ? '' : 's'}.`
+          : 'Letterboxd checked. No new activity found.',
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to refresh Letterboxd activity right now.');
+      try {
+        const statusResponse = await getLetterboxdStatus();
+        setLetterboxdStatus(statusResponse.status);
+      } catch {
+        // best-effort status refresh only
+      }
+    } finally {
+      setLetterboxdBusy(false);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -321,7 +388,23 @@ export default function ProfileSummaryScreen() {
               autoCapitalize="none"
               error={errors.tvtimeUsername}
             />
-            <ThemedText themeColor="textSecondary">Viewing-history synchronization is not enabled yet.</ThemedText>
+            <View style={styles.sectionInset}>
+              <ThemedText type="smallBold">Letterboxd watched-history sync</ThemedText>
+              <ThemedText themeColor="textSecondary">Status: {letterboxdStatusText}</ThemedText>
+              <ThemedText themeColor="textSecondary">Imported from public activity: {letterboxdStatus?.rssCount ?? 0} titles</ThemedText>
+              {letterboxdStatus?.lastSuccessfulRefreshAt ? (
+                <ThemedText themeColor="textSecondary">Last successful refresh: {new Date(letterboxdStatus.lastSuccessfulRefreshAt).toLocaleString()}</ThemedText>
+              ) : null}
+              {letterboxdStatus?.lastErrorMessage ? <ThemedText style={styles.errorText}>{letterboxdStatus.lastErrorMessage}</ThemedText> : null}
+              <View style={styles.inlineRow}>
+                <Pressable style={styles.secondaryButton} onPress={() => void toggleLetterboxdSync()} disabled={letterboxdBusy}>
+                  <ThemedText style={styles.secondaryButtonText}>{letterboxdStatus?.enabled ? 'Disable public sync' : 'Enable public sync'}</ThemedText>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={() => void refreshLetterboxd()} disabled={letterboxdBusy || !letterboxdStatus?.enabled}>
+                  <ThemedText style={styles.secondaryButtonText}>{letterboxdBusy ? 'Refreshing...' : 'Refresh now'}</ThemedText>
+                </Pressable>
+              </View>
+            </View>
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.sectionCard}>
@@ -493,6 +576,13 @@ const styles = StyleSheet.create({
   avatarOptionSelected: { borderColor: BrandColors.scoutyBlue, backgroundColor: '#ecf3ff' },
   avatarOptionImage: { width: 64, height: 64 },
   avatarOptionLabel: { fontSize: 12, textAlign: 'center' },
+  sectionInset: {
+    borderWidth: 1,
+    borderColor: BrandColors.border,
+    borderRadius: Radii.medium,
+    padding: Spacing.two,
+    gap: Spacing.one,
+  },
   searchInput: {
     borderWidth: 1,
     borderColor: BrandColors.border,

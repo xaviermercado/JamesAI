@@ -81,6 +81,20 @@ export interface UserPreferences {
   providerCatalogAvailabilityKnown?: boolean;
 }
 
+export type LetterboxdRssStatus = 'idle' | 'ok' | 'error';
+
+export interface LetterboxdSyncStatus {
+  enabled: boolean;
+  rssStatus: LetterboxdRssStatus;
+  lastCheckedAt: string | null;
+  lastSuccessfulRefreshAt: string | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  rssCount: number;
+  exportCount: number;
+  username: string | null;
+}
+
 export interface PreferencesCatalog {
   providers: StreamingServiceCatalogItem[];
   countries: CountryCatalogItem[];
