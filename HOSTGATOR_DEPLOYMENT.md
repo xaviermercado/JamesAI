@@ -13,5 +13,6 @@ The backend is a Node/Express app and should be hosted separately (Render, Railw
 ## Production API URL
 Set the frontend API base URL with:
 - EXPO_PUBLIC_API_BASE_URL=https://your-backend-domain.com
+- EXPO_PUBLIC_GOOGLE_ANALYTICS_ID=G-XBKN44PS5L
 
 If you are using a local preview build, the default still points to http://localhost:3001.

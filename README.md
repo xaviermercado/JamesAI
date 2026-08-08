@@ -65,6 +65,7 @@ Root/local frontend and backend development:
 
 - `PORT`
 - `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_GOOGLE_ANALYTICS_ID`
 - `FRONTEND_ORIGIN`
 - `APP_BASE_URL`
 - `AUTH_COOKIE_DOMAIN`

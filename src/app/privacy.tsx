@@ -20,6 +20,7 @@ export default function PrivacyScreen() {
             <ThemedText themeColor="textSecondary">If you add a Letterboxd username and enable public activity sync, {PUBLIC_BRAND_NAME} fetches only your public Letterboxd RSS activity feed from letterboxd.com using your explicit request.</ThemedText>
             <ThemedText themeColor="textSecondary">We store normalized title/year watch-history signals from that feed so recommendations can avoid movies you have already seen. We do not scrape non-public pages and do not use unofficial APIs.</ThemedText>
             <ThemedText themeColor="textSecondary">You can disable Letterboxd public sync at any time from your profile. Existing imported entries may still be retained according to operational retention policies unless deleted by support tooling.</ThemedText>
+            <ThemedText themeColor="textSecondary">We use Google Analytics to understand aggregate site usage and improve {PUBLIC_BRAND_NAME}. Google may process device, browser, approximate location, and interaction data according to its privacy terms.</ThemedText>
             <ThemedText themeColor="textSecondary">Detailed production privacy copy should still be reviewed with legal before launch.</ThemedText>
           </View>
           <AppFooter />
