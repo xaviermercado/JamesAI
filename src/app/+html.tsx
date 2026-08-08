@@ -7,6 +7,7 @@ export default function Root({ children }: PropsWithChildren) {
   return (
     <html {...htmlAttributes}>
       <head>
+        <meta charSet="utf-8" />
         {headNodes}
       </head>
       <body {...bodyAttributes}>

@@ -2,7 +2,11 @@ export function resolveApiBaseUrl(explicitBaseUrl?: string): string {
   const configuredBaseUrl = (explicitBaseUrl ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim();
 
   if (configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/$/, '');
+    const normalizedBaseUrl = configuredBaseUrl.replace(/\/$/, '');
+    if (process.env.NODE_ENV === 'production' && !normalizedBaseUrl.startsWith('https://')) {
+      throw new Error('EXPO_PUBLIC_API_BASE_URL must use HTTPS in production');
+    }
+    return normalizedBaseUrl;
   }
 
   if (typeof window !== 'undefined' && typeof window.location?.hostname === 'string') {

@@ -1,4 +1,5 @@
 DirectoryIndex index.html
+AddDefaultCharset UTF-8
 RewriteEngine On
 
 # Keep production search signals on the canonical HTTPS apex origin.
