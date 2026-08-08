@@ -14,10 +14,18 @@ export class ProductAnalyticsRepository implements ProductAnalyticsRepositoryLik
         result_count_bucket, response_status, response_time_bucket, media_type,
         genre_filter_count, provider_filter_count, language_filter_count, authenticated,
         failure_category, feedback_category, source_surface
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, COALESCE(?, (
+        SELECT inherited.configuration_version_id
+        FROM product_analytics_events AS inherited
+        WHERE inherited.recommendation_correlation_id = ?
+          AND inherited.configuration_version_id IS NOT NULL
+        ORDER BY inherited.occurred_at ASC
+        LIMIT 1
+      )), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         event.eventId, event.recommendationCorrelationId, event.eventName, event.occurredAt,
-        event.configurationVersionId, event.resultCountBucket, event.responseStatus,
+        event.configurationVersionId, event.recommendationCorrelationId,
+        event.resultCountBucket, event.responseStatus,
         event.responseTimeBucket, event.mediaType, event.genreFilterCount,
         event.providerFilterCount, event.languageFilterCount, event.authenticated ? 1 : 0,
         event.failureCategory, event.feedbackCategory, event.sourceSurface,
@@ -57,9 +65,9 @@ export class ProductAnalyticsRepository implements ProductAnalyticsRepositoryLik
           response_status, response_time_bucket, media_type, failure_category,
           feedback_category, source_surface, authenticated, event_count, correlated_request_count
         )
-        SELECT ?, UNHEX(SHA2(CONCAT_WS('|', 'helpful_recommendation_request', '', 'none',
+        SELECT ?, UNHEX(SHA2(CONCAT_WS('|', 'helpful_recommendation_request', COALESCE(configuration_version_id, ''), 'none',
           'success', 'none', 'none', 'none', 'none', 'recommendations', 0), 256)),
-          'helpful_recommendation_request', '', 'none', 'success', 'none',
+          'helpful_recommendation_request', COALESCE(configuration_version_id, ''), 'none', 'success', 'none',
           'none', 'none', 'none', 'recommendations', 0,
           COUNT(DISTINCT recommendation_correlation_id), COUNT(DISTINCT recommendation_correlation_id)
         FROM product_analytics_events
@@ -67,6 +75,7 @@ export class ProductAnalyticsRepository implements ProductAnalyticsRepositoryLik
           AND recommendation_correlation_id IS NOT NULL
           AND (event_name = 'recommendation_saved'
             OR (event_name = 'recommendation_feedback' AND feedback_category = 'positive'))
+        GROUP BY COALESCE(configuration_version_id, '')
         HAVING COUNT(DISTINCT recommendation_correlation_id) > 0`,
         [aggregateDate, dayStart, dayEnd],
       );

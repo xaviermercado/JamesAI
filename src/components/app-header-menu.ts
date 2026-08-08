@@ -1,6 +1,7 @@
 export type HeaderAuthStatus = 'initializing' | 'authenticated' | 'anonymous';
 export type AccountAction =
   | 'search'
+  | 'admin'
   | 'library'
   | 'profile'
   | 'about'
@@ -20,6 +21,8 @@ export const AUTHENTICATED_MENU_ACTIONS: HeaderMenuItem[] = [
   { key: 'profile', label: 'Profile' },
   { key: 'logout', label: 'Log out' },
 ];
+
+const ADMIN_MENU_ACTION: HeaderMenuItem = { key: 'admin', label: 'Admin' };
 
 export const ANONYMOUS_MENU_ACTIONS: HeaderMenuItem[] = [
   { key: 'login', label: 'Log in' },
@@ -41,6 +44,7 @@ export function resolveMainMenuTriggerLabel(menuOpen: boolean): string {
 
 export function resolveAccountActionRoute(action: AccountAction): string | null {
   if (action === 'search') return '/';
+  if (action === 'admin') return '/admin';
   if (action === 'library') return '/profile/library';
   if (action === 'profile') return '/profile';
   if (action === 'about') return '/about';
@@ -58,6 +62,10 @@ export function shouldUseCompactAnonymousMenu(showAccountMenu: boolean, viewport
   return !showAccountMenu && (!viewportHydrated || width < 768);
 }
 
-export function getHeaderMenuActions(status: HeaderAuthStatus): HeaderMenuItem[] {
-  return status === 'authenticated' ? AUTHENTICATED_MENU_ACTIONS : ANONYMOUS_MENU_ACTIONS;
+export function getHeaderMenuActions(status: HeaderAuthStatus, adminRole: 'user' | 'editor' | 'owner' = 'user'): HeaderMenuItem[] {
+  if (status !== 'authenticated') return ANONYMOUS_MENU_ACTIONS;
+  if (adminRole === 'editor' || adminRole === 'owner') {
+    return [...AUTHENTICATED_MENU_ACTIONS.slice(0, 3), ADMIN_MENU_ACTION, AUTHENTICATED_MENU_ACTIONS[3]];
+  }
+  return AUTHENTICATED_MENU_ACTIONS;
 }

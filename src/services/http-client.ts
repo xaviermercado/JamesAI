@@ -7,6 +7,7 @@ export class HttpRequestError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly fieldErrors: { field: string; message: string }[] = [],
   ) {
     super(message);
     this.name = 'HttpRequestError';
@@ -69,7 +70,10 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
       clearAuthSessionToken();
       notifyUnauthorizedResponse();
     }
-    throw new HttpRequestError(message, response.status);
+    const fieldErrors = Array.isArray((payload as { fieldErrors?: unknown }).fieldErrors)
+      ? (payload as { fieldErrors: { field: string; message: string }[] }).fieldErrors
+      : [];
+    throw new HttpRequestError(message, response.status, fieldErrors);
   }
 
   return response.json() as Promise<T>;

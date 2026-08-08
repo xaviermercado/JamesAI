@@ -147,13 +147,24 @@ The current phase keeps email verification and password reset for the next step.
 
 ## Migrations
 
-Run the initial migration from the repository root:
+Run pending migrations from the repository root:
 
 ```bash
 npm run db:migrate
 ```
 
 The same command is also available from the `server/` package as `npm run db:migrate`.
+
+Applied migration files are immutable. The runner compares each applied file with the SHA-256 checksum stored in `schema_migrations` and stops on drift. Make schema corrections in a new numbered migration; do not edit an applied SQL file.
+
+Before applying an administration-schema migration:
+
+1. Take and verify a database backup.
+2. Run the migration in a staging database with the same MySQL 5.7 release.
+3. Confirm there is at least one verified account that can be provisioned as the initial Owner with `npm --prefix server run admin:provision-owner -- --email <address>`.
+4. Apply the migration during a monitored change window, then verify readiness and administrator sign-in.
+
+MySQL 5.7 DDL statements auto-commit, so SQL transaction rollback is not a reliable schema rollback. If the migration itself fails, stop the application and restore the pre-migration backup. If the migration succeeds but application verification fails, roll the application back while leaving the additive schema in place, then ship a reviewed forward migration. Do not drop administration or audit tables until their retention and evidence requirements have been reviewed.
 
 ## Database readiness
 

@@ -12,6 +12,7 @@ export const users = mysqlTable(
     accountStatus: mysqlEnum('account_status', ['pending_verification', 'active', 'disabled'])
       .notNull()
       .default('pending_verification'),
+    adminRole: mysqlEnum('admin_role', ['user', 'editor', 'owner']).notNull().default('user'),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
   },
@@ -19,6 +20,7 @@ export const users = mysqlTable(
     primaryKey: primaryKey({ columns: [table.userId] }),
     emailUnique: uniqueIndex('uq_users_email').on(table.email),
     statusEmailIndex: index('idx_users_account_status_email').on(table.accountStatus, table.email),
+    adminRoleIndex: index('idx_users_admin_role').on(table.adminRole, table.accountStatus),
   }),
 );
 
@@ -31,6 +33,7 @@ export const userSessions = mysqlTable(
     expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
     revokedAt: datetime('revoked_at', { mode: 'date', fsp: 3 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+    authenticatedAt: datetime('authenticated_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
     lastUsedAt: datetime('last_used_at', { mode: 'date', fsp: 3 }),
     deviceLabel: varchar('device_label', { length: 120 }),
     clientPlatform: mysqlEnum('client_platform', ['web', 'ios', 'android', 'unknown'])

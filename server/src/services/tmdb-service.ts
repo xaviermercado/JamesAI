@@ -59,6 +59,14 @@ interface TmdbKeywordSearchResponse {
   results?: Array<{ id: number; name: string }>;
 }
 
+export interface TmdbTitleSearchResult {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  releaseYear: number | null;
+  posterUrl: string;
+}
+
 // Map for backward compatibility with legacy name-based streamingServices.
 const providerNameToIdMap: Record<string, string> = {
   netflix: '8',
@@ -320,6 +328,24 @@ export class TmdbService {
 
   async getMovieProviders(movieId: number, mediaType: 'movie' | 'tv', country?: string): Promise<string[]> {
     return this.getWatchProviders(movieId, mediaType, country);
+  }
+
+  async searchTitles(query: string, mediaType?: 'movie' | 'tv'): Promise<TmdbTitleSearchResult[]> {
+    const mediaTypes: Array<'movie' | 'tv'> = mediaType ? [mediaType] : ['movie', 'tv'];
+    const resultGroups = await Promise.all(mediaTypes.map(async (type) => ({
+      type,
+      results: await this.searchByTitle(query, type),
+    })));
+    return resultGroups.flatMap(({ type, results }) => results.slice(0, 10).map((result) => {
+      const releaseDate = result.release_date ?? result.first_air_date ?? '';
+      return {
+        tmdbId: result.id,
+        mediaType: type,
+        title: result.title ?? result.name ?? 'Untitled',
+        releaseYear: releaseDate ? Number(releaseDate.slice(0, 4)) || null : null,
+        posterUrl: result.poster_path ? `https://image.tmdb.org/t/p/w185${result.poster_path}` : '',
+      };
+    })).slice(0, 20);
   }
 
   async getTitleSummary(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<MovieCandidate | null> {

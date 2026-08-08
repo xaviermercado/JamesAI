@@ -46,6 +46,32 @@ describe('ProductAnalyticsService', () => {
     expect(await service.record({ eventName: 'recommendation_requested', mediaType: 'movie' })).toBe(false);
   });
 
+  it('pins a server-only configuration version on a request-scoped recorder', async () => {
+    const repository = new InMemoryRepository();
+    const service = new ProductAnalyticsService(repository, 'deployment-default');
+    const recorder = service.forConfiguration('configuration-42');
+
+    await recorder.record({
+      eventName: 'recommendation_requested',
+      recommendationCorrelationId: '0f891af5-800c-4c39-b26e-494b2d950fcc',
+      mediaType: 'movie',
+    });
+    await recorder.record({
+      eventName: 'recommendation_completed',
+      recommendationCorrelationId: '0f891af5-800c-4c39-b26e-494b2d950fcc',
+      responseStatus: 'success',
+    });
+
+    expect(repository.events.map((event) => event.configurationVersionId)).toEqual([
+      'configuration-42',
+      'configuration-42',
+    ]);
+    expect(await service.record({
+      eventName: 'registration_completed',
+      configurationVersionId: 'client-controlled',
+    } as never)).toBe(false);
+  });
+
   it('runs idempotent aggregation before bounded 90-day retention', async () => {
     const repository = new InMemoryRepository();
     const service = new ProductAnalyticsService(repository);

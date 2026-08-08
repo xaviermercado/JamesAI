@@ -18,6 +18,8 @@ import type { LibraryRepositoryLike, ListLibraryInput, StoredLibraryTitle } from
 import type { ContentLanguageSelection, ProfileRepositoryLike, ReplacePreferencesInput, StoredProfile, UpsertProfileInput } from '../profile/profile-repository';
 import { createRecommendationsRouter } from '../routes/recommendations';
 import type { TmdbService } from '../services/tmdb-service';
+import { ProductAnalyticsService, type ProductAnalyticsRepositoryLike, type ValidatedProductAnalyticsEvent } from '../analytics/product-analytics';
+import { createBaselineConfiguration } from '../admin/configuration';
 
 function createConfig(): AppConfig {
   return {
@@ -237,6 +239,51 @@ describe('recommendations route', () => {
   it('rejects oversized descriptions', async () => {
     const res = await request(app).post('/api/recommendations').send({ description: 'a'.repeat(1001) });
     expect(res.status).toBe(400);
+  });
+
+  it('rejects client-controlled configuration version IDs', async () => {
+    const res = await request(app).post('/api/recommendations').send({
+      description: 'drama',
+      configurationVersionId: 'client-version',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('uses one authoritative configuration version for all request events', async () => {
+    const events: ValidatedProductAnalyticsEvent[] = [];
+    const analyticsRepository: ProductAnalyticsRepositoryLike = {
+      insertEvent: async (event) => { events.push(event); },
+      aggregateUtcDay: async () => undefined,
+      deleteEventsBefore: async () => 0,
+      listDaily: async () => [],
+    };
+    const configuration = createBaselineConfiguration();
+    const configurationService = {
+      getEffectiveConfiguration: vi.fn(async () => ({
+        stored: { configurationId: 'authoritative-version' },
+        configuration,
+      })),
+    };
+    const configuredApp = express();
+    configuredApp.use(express.json());
+    configuredApp.use('/api', createRecommendationsRouter(
+      tmdb as unknown as TmdbService,
+      config,
+      authRepo,
+      profileRepo,
+      null,
+      libraryRepo,
+      letterboxdRepo,
+      new ProductAnalyticsService(analyticsRepository, 'deployment-default'),
+      configurationService as never,
+    ));
+
+    const response = await request(configuredApp).post('/api/recommendations').send({ description: 'drama' });
+
+    expect(response.status).toBe(200);
+    expect(configurationService.getEffectiveConfiguration).toHaveBeenCalledOnce();
+    expect(events.map((event) => event.eventName)).toEqual(['recommendation_requested', 'recommendation_completed']);
+    expect(events.every((event) => event.configurationVersionId === 'authoritative-version')).toBe(true);
   });
 
   it('rejects unsupported provider IDs', async () => {

@@ -170,6 +170,7 @@ export class AuthService {
       token_hash: sessionTokenHash,
       expires_at: expiresAt,
       created_at: createdAt,
+      authenticated_at: createdAt,
       last_used_at: null,
       device_label: input.deviceLabel ?? null,
       client_platform: input.clientPlatform ?? 'web',
@@ -184,6 +185,7 @@ export class AuthService {
         sessionTokenHash,
         csrfToken: createCsrfToken(sessionTokenHash, this.sessionPepper),
         expiresAt: expiresAt.toISOString(),
+        authenticatedAt: createdAt.toISOString(),
       },
     };
   }
@@ -193,7 +195,7 @@ export class AuthService {
     const session = await this.repo.findActiveSessionByTokenHash(sessionTokenHash);
 
     if (!session) {
-      return { authenticated: false, user: null, csrfToken: null };
+      return { authenticated: false, user: null, csrfToken: null, authenticatedAt: null };
     }
 
     await this.repo.touchSessionLastUsedAt(session.session_id, new Date(Date.now() - 5 * 60 * 1000));
@@ -205,16 +207,19 @@ export class AuthService {
         email: session.user_email,
         emailVerifiedAt: session.user_email_verified_at ? session.user_email_verified_at.toISOString() : null,
         accountStatus: session.user_account_status,
+        adminRole: session.user_admin_role ?? 'user',
         createdAt: session.user_created_at.toISOString(),
         updatedAt: session.user_updated_at.toISOString(),
       },
       csrfToken: createCsrfToken(session.token_hash, this.sessionPepper),
+      authenticatedAt: session.authenticated_at?.toISOString() ?? null,
       identity: {
         userId: session.user_id,
         sessionId: session.session_id,
         sessionTokenHash: session.token_hash,
         csrfToken: createCsrfToken(session.token_hash, this.sessionPepper),
         expiresAt: session.expires_at.toISOString(),
+        authenticatedAt: session.authenticated_at?.toISOString() ?? null,
       },
     };
   }

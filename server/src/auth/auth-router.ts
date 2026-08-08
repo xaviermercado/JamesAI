@@ -206,7 +206,7 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
       }
 
       setSessionCookie(res, result.sessionToken, config, buildCookieContext(req));
-      return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken, sessionToken: result.sessionToken });
+      return res.json({ authenticated: true, user: result.user, csrfToken: result.identity.csrfToken, authenticatedAt: result.identity.authenticatedAt, sessionToken: result.sessionToken });
     } catch (error) {
       logAuthRouteError('/login', req, error);
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -216,21 +216,21 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
   router.get('/session', async (req, res) => {
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
-      return res.json({ authenticated: false, user: null, csrfToken: null });
+      return res.json({ authenticated: false, user: null, csrfToken: null, authenticatedAt: null });
     }
 
     try {
       const restored = await authService.restoreSession(sessionToken);
       if (!restored.authenticated || !restored.identity) {
         clearSessionCookie(res, config, buildCookieContext(req));
-        return res.json({ authenticated: false, user: null, csrfToken: null });
+        return res.json({ authenticated: false, user: null, csrfToken: null, authenticatedAt: null });
       }
 
-      return res.json({ authenticated: true, user: restored.user, csrfToken: restored.identity.csrfToken });
+      return res.json({ authenticated: true, user: restored.user, csrfToken: restored.identity.csrfToken, authenticatedAt: restored.identity.authenticatedAt });
     } catch (error) {
       logAuthRouteError('/session', req, error);
       clearSessionCookie(res, config, buildCookieContext(req));
-      return res.json({ authenticated: false, user: null, csrfToken: null });
+      return res.json({ authenticated: false, user: null, csrfToken: null, authenticatedAt: null });
     }
   });
 

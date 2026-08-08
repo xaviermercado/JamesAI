@@ -13,6 +13,8 @@ export interface RecommendationRequest {
   /** Temporary original-language codes (ISO 639-1). undefined = inherit saved; [] = any language. */
   originalLanguages?: string[];
   excludedMovieIds?: number[];
+  /** Server-generated, bounded editorial data. It is never accepted from the public API. */
+  editorialContext?: string;
 }
 
 export interface ParsedMovieCriteria {

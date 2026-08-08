@@ -22,6 +22,6 @@ export const recommendationSchema = z.object({
     .transform((codes) => [...new Set(codes)])
     .optional(),
   excludedMovieIds: z.array(z.number().int().positive()).max(100).optional(),
-});
+}).strict();
 
 export type RecommendationInput = z.infer<typeof recommendationSchema>;

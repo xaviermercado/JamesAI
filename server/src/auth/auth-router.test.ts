@@ -274,7 +274,9 @@ describe('auth router', () => {
 
     expect(loginResponse.status).toBe(200);
     expect(loginResponse.body.authenticated).toBe(true);
+    expect(loginResponse.body.user.adminRole).toBe('user');
     expect(loginResponse.body.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(new Date(loginResponse.body.authenticatedAt).toISOString()).toBe(loginResponse.body.authenticatedAt);
   });
 
   it('rejects duplicate email registration', async () => {
@@ -416,7 +418,9 @@ describe('auth router', () => {
     expect(sessionResponse.status).toBe(200);
     expect(sessionResponse.body.authenticated).toBe(true);
     expect(sessionResponse.body.user.email).toBe('user@example.com');
+    expect(sessionResponse.body.user.adminRole).toBe('user');
     expect(sessionResponse.body.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(new Date(sessionResponse.body.authenticatedAt).toISOString()).toBe(sessionResponse.body.authenticatedAt);
   });
 
   it('single-device logout does not revoke other active sessions', async () => {

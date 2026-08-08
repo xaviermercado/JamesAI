@@ -63,6 +63,14 @@ describe('AnalyticsClient', () => {
     expect(transport.events).toEqual([{ name: 'page_view', parameters: { route: '/about', page_title: 'About Scouty' } }]);
   });
 
+  it('does not send page views for admin routes', async () => {
+    const { client, transport } = createEnabledClient();
+    client.setConsent('accepted');
+    await client.enable();
+    expect(client.trackPageView('/admin/guidance?draft=private')).toBe(false);
+    expect(transport.events).toHaveLength(0);
+  });
+
   it('stops collection after withdrawal', async () => {
     const { client, transport } = createEnabledClient();
     client.setConsent('accepted');

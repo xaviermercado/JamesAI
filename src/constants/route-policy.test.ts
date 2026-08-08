@@ -17,6 +17,12 @@ describe('search visibility policy', () => {
     expect(getRoutePolicy('/unknown/private/value')).toMatchObject({ path: '/not-found', indexing: 'noindex', sitemap: false });
   });
 
+  it('keeps every admin route private, out of the sitemap, and excluded from analytics', () => {
+    for (const path of ['/admin', '/admin/guidance', '/admin/sandbox', '/admin/versions', '/admin/feedback', '/admin/audit']) {
+      expect(getRoutePolicy(`${path}?private=value`)).toMatchObject({ path, indexing: 'noindex', sitemap: false, analytics: false });
+    }
+  });
+
   it('generates a production robots file and public-only XML sitemap', () => {
     const robots = createRobotsTxt(true);
     const sitemap = createSitemapXml(true);

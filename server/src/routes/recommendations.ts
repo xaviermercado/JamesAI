@@ -20,6 +20,13 @@ import { TmdbService } from '../services/tmdb-service';
 import type { RecommendationRequest } from '../types/recommendations';
 import { logger } from '../utils/logger';
 import { classifyFailure, createRecommendationCorrelationId, ProductAnalyticsService, responseTimeBucket, resultCountBucket } from '../analytics/product-analytics';
+import type { ProductAnalyticsRecorder } from '../analytics/product-analytics';
+import { adaptConfiguration, createBaselineConfiguration } from '../admin/configuration';
+import type { ConfigurationService } from '../admin/configuration';
+import {
+  applyConfigurationToRecommendations,
+  applyConfigurationToRequest,
+} from '../admin/configuration/recommendation-adapter';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -108,6 +115,7 @@ export function createRecommendationsRouter(
   libraryRepo?: LibraryRepositoryLike | null,
   letterboxdRepo?: LetterboxdRepositoryLike | null,
   productAnalytics?: ProductAnalyticsService | null,
+  configurationService?: Pick<ConfigurationService, 'getEffectiveConfiguration'> | null,
 ) {
   const router = express.Router();
 
@@ -116,10 +124,23 @@ export function createRecommendationsRouter(
     const startedAt = Date.now();
     let authenticated = false;
     let mediaType: 'movie' | 'tv' = 'movie';
+    let analytics: ProductAnalyticsRecorder | null = productAnalytics ?? null;
+    let configurationAdapter = adaptConfiguration(createBaselineConfiguration());
     try {
+      if (configurationService) {
+        try {
+          const effectiveConfiguration = await configurationService.getEffectiveConfiguration();
+          configurationAdapter = adaptConfiguration(effectiveConfiguration.configuration);
+          analytics = productAnalytics?.forConfiguration(effectiveConfiguration.stored.configurationId) ?? null;
+        } catch {
+          logger.warn('recommendations.configuration_load_failed', { category: 'database' });
+          analytics = productAnalytics?.forConfiguration(null) ?? null;
+        }
+      }
+
       const parsed = recommendationSchema.safeParse(req.body);
       if (!parsed.success) {
-        await productAnalytics?.record({
+        await analytics?.record({
           eventName: 'recommendation_failed', recommendationCorrelationId,
           responseStatus: 'failure', failureCategory: 'validation', sourceSurface: 'recommendations',
         });
@@ -142,14 +163,14 @@ export function createRecommendationsRouter(
         originalLanguages: parsed.data.originalLanguages,
         streamingServices: parsed.data.streamingServices,
       });
-      await productAnalytics?.record({
+      await analytics?.record({
         eventName: 'recommendation_requested', recommendationCorrelationId, mediaType,
         providerFilterCount: Math.min(20, effective.effectiveProviderIds?.length ?? effective.legacyStreamingServices?.length ?? 0),
         languageFilterCount: Math.min(20, effective.effectiveLanguages?.length ?? 0),
         authenticated, sourceSurface: 'recommendations',
       });
 
-      const payload: RecommendationRequest = {
+      let payload: RecommendationRequest = {
         description: parsed.data.description,
         mediaType: parsed.data.mediaType,
         maxRuntime: parsed.data.maxRuntime ?? undefined,
@@ -159,6 +180,10 @@ export function createRecommendationsRouter(
         streamingServices: effective.legacyStreamingServices,
         excludedMovieIds: parsed.data.excludedMovieIds,
       };
+      payload = applyConfigurationToRequest(payload, configurationAdapter, {
+        preserveProviders: parsed.data.providerIds !== undefined || parsed.data.streamingServices !== undefined,
+        preserveLanguages: parsed.data.originalLanguages !== undefined,
+      });
 
       // Default repetition control: suppress watched titles unless explicit rewatch intent is present.
       if (authContext && libraryRepo && !hasExplicitRewatchIntent(parsed.data.description)) {
@@ -178,7 +203,7 @@ export function createRecommendationsRouter(
       }
 
       const result = await tmdbService.getRecommendations(payload);
-      let personalizedRecommendations = result.recommendations;
+      let personalizedRecommendations = applyConfigurationToRecommendations(result.recommendations, configurationAdapter);
 
       if (authContext && letterboxdRepo && !hasExplicitRewatchIntent(parsed.data.description)) {
         try {
@@ -216,14 +241,14 @@ export function createRecommendationsRouter(
           const signals = calculateTasteSignals(feedbackEntries);
 
           if (signals.hasMinimumEvidence) {
-            const reranked = applyPersonalizedRanking(result.recommendations, signals, {
+            const reranked = applyPersonalizedRanking(personalizedRecommendations, signals, {
               mediaType: payload.mediaType ?? 'movie',
               explicitLanguageFilter: parsed.data.originalLanguages,
               ratedTitleKeys: new Set(ratedTitles.map((item) => `${item.mediaType}:${item.tmdbId}`)),
             });
 
             const changedOrder = reranked.some(
-              (item, index) => item.tmdbMovieId !== result.recommendations[index]?.tmdbMovieId,
+              (item, index) => item.tmdbMovieId !== personalizedRecommendations[index]?.tmdbMovieId,
             );
             if (changedOrder) {
               personalizedRecommendations = reranked;
@@ -237,7 +262,7 @@ export function createRecommendationsRouter(
       }
 
       const resultBucket = resultCountBucket(personalizedRecommendations.length);
-      await productAnalytics?.record({
+      await analytics?.record({
         eventName: 'recommendation_completed', recommendationCorrelationId, mediaType,
         responseStatus: personalizedRecommendations.length > 0 ? 'success' : 'empty',
         responseTimeBucket: responseTimeBucket(Date.now() - startedAt), resultCountBucket: resultBucket,
@@ -259,7 +284,7 @@ export function createRecommendationsRouter(
           : undefined,
       });
     } catch (error) {
-      await productAnalytics?.record({
+      await analytics?.record({
         eventName: 'recommendation_failed', recommendationCorrelationId, mediaType,
         responseStatus: 'failure', responseTimeBucket: responseTimeBucket(Date.now() - startedAt),
         failureCategory: classifyFailure(error, 'metadata_provider'), authenticated,

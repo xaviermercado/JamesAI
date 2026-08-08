@@ -22,6 +22,13 @@ import { createContactRouter } from './contact/contact-router';
 import { logger } from './utils/logger';
 import { ProductAnalyticsRepository } from './analytics/product-analytics-repository';
 import { ProductAnalyticsService } from './analytics/product-analytics';
+import { AuthService } from './auth/auth-service';
+import { AdminAccessRepository } from './admin/admin-access-repository';
+import { createAdminAuthorization } from './admin/admin-authorization';
+import { createAdminRouter } from './admin/admin-router';
+import { ConfigurationService, MySqlConfigurationRepository } from './admin/configuration';
+import { InsightsRepository } from './admin/insights/insights-repository';
+import { InsightsService } from './admin/insights/insights-service';
 
 dotenv.config();
 
@@ -46,6 +53,8 @@ const libraryRepository = databaseConnection ? new LibraryRepository(databaseCon
 const letterboxdRepository = databaseConnection ? new LetterboxdRepository(databaseConnection.pool) : null;
 const productAnalyticsRepository = databaseConnection ? new ProductAnalyticsRepository(databaseConnection.pool) : null;
 const productAnalytics = new ProductAnalyticsService(productAnalyticsRepository, config.jamesConfigurationVersionId ?? null);
+const configurationRepository = databaseConnection ? new MySqlConfigurationRepository(databaseConnection.pool) : null;
+const configurationService = configurationRepository ? new ConfigurationService(configurationRepository) : null;
 
 app.use(cors({
   origin: config.frontendOrigin ?? true,
@@ -117,6 +126,18 @@ if (authRepository) {
   if (libraryRepository) {
     app.use('/api/library', createLibraryRouter(config, authRepository, libraryRepository, tmdbService, productAnalytics));
   }
+
+  if (databaseConnection && configurationService) {
+    const adminAuthorization = createAdminAuthorization(new AuthService(authRepository, config), config);
+    app.use('/api/admin', createAdminRouter({
+      config,
+      authorization: adminAuthorization,
+      configurationService,
+      insightsService: new InsightsService(new InsightsRepository(databaseConnection.pool)),
+      adminAccessRepository: new AdminAccessRepository(databaseConnection.pool),
+      tmdbService,
+    }));
+  }
 } else {
   app.get('/api/auth/session', (_req, res) => {
     res.json({ authenticated: false, user: null, csrfToken: null });
@@ -145,9 +166,23 @@ if (authRepository) {
       error: 'Library features are disabled until authentication is enabled.',
     });
   });
+
+  app.use('/api/admin', (_req, res) => {
+    res.status(503).json({ error: 'Admin features are disabled until authentication is enabled.' });
+  });
 }
 
-app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository, letterboxdRepository, productAnalytics));
+app.use('/api', createRecommendationsRouter(
+  tmdbService,
+  config,
+  authRepository,
+  profileRepository,
+  feedbackRepository,
+  libraryRepository,
+  letterboxdRepository,
+  productAnalytics,
+  configurationService,
+));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });

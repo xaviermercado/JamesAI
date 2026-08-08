@@ -3,6 +3,7 @@ export interface SafeUser {
   email: string;
   emailVerifiedAt: string | null;
   accountStatus: 'pending_verification' | 'active' | 'disabled';
+  adminRole: 'user' | 'editor' | 'owner';
   createdAt: string;
   updatedAt: string;
 }
@@ -11,6 +12,7 @@ export interface AuthSessionResponse {
   authenticated: boolean;
   user: SafeUser | null;
   csrfToken: string | null;
+  authenticatedAt?: string | null;
   sessionToken?: string | null;
 }
 

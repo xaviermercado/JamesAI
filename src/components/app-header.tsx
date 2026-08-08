@@ -32,7 +32,7 @@ function clamp(value: number, min: number, max: number): number {
 export function AppHeader() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { status, csrfToken, clearSession } = useAuthSession();
+  const { status, user, csrfToken, clearSession } = useAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountLabel, setAccountLabel] = useState('My account');
   const [avatarId, setAvatarId] = useState<ScoutyAvatarId>(SCOUTY_DEFAULT_AVATAR_ID);
@@ -46,7 +46,7 @@ export function AppHeader() {
   const menuItemRefs = useRef<(View | null)[]>([]);
   const showAccountMenu = shouldShowAccountMenu(status);
   const isCompactAnonymousMenu = shouldUseCompactAnonymousMenu(showAccountMenu, viewportHydrated, width);
-  const menuActions = useMemo(() => getHeaderMenuActions(status), [status]);
+  const menuActions = useMemo(() => getHeaderMenuActions(status, user?.adminRole), [status, user?.adminRole]);
 
   const triggerA11yLabel = useMemo(
     () => (showAccountMenu ? resolveAccountTriggerLabel(menuOpen, accountLabel) : resolveMainMenuTriggerLabel(menuOpen)),

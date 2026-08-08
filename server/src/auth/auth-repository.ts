@@ -1,6 +1,6 @@
 import type { Pool } from 'mysql2';
 
-import type { AuthAccountStatus, SafeUser } from './auth-types';
+import type { AdminRole, AuthAccountStatus, SafeUser } from './auth-types';
 
 export interface StoredUser {
   user_id: string;
@@ -8,6 +8,7 @@ export interface StoredUser {
   password_hash: string;
   email_verified_at: Date | null;
   account_status: AuthAccountStatus;
+  admin_role?: AdminRole;
   created_at: Date;
   updated_at: Date;
 }
@@ -19,6 +20,7 @@ export interface StoredSession {
   expires_at: Date;
   revoked_at: Date | null;
   created_at: Date;
+  authenticated_at?: Date;
   last_used_at: Date | null;
   device_label: string | null;
   client_platform: 'web' | 'ios' | 'android' | 'unknown';
@@ -62,6 +64,7 @@ export interface SessionWithUser extends StoredSession {
   user_email: string;
   user_email_verified_at: Date | null;
   user_account_status: AuthAccountStatus;
+  user_admin_role?: AdminRole;
   user_created_at: Date;
   user_updated_at: Date;
 }
@@ -102,14 +105,14 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
 
   async findUserByEmail(email: string): Promise<StoredUser | null> {
     return this.selectOne<StoredUser>(
-      'SELECT user_id, email, password_hash, email_verified_at, account_status, created_at, updated_at FROM users WHERE email = ? LIMIT 1',
+      'SELECT user_id, email, password_hash, email_verified_at, account_status, admin_role, created_at, updated_at FROM users WHERE email = ? LIMIT 1',
       [email],
     );
   }
 
   async findUserById(userId: string): Promise<StoredUser | null> {
     return this.selectOne<StoredUser>(
-      'SELECT user_id, email, password_hash, email_verified_at, account_status, created_at, updated_at FROM users WHERE user_id = ? LIMIT 1',
+      'SELECT user_id, email, password_hash, email_verified_at, account_status, admin_role, created_at, updated_at FROM users WHERE user_id = ? LIMIT 1',
       [userId],
     );
   }
@@ -158,14 +161,14 @@ abstract class BaseAuthRepository implements AuthRepositoryLike {
 
   async createSession(session: Omit<StoredSession, 'revoked_at'>): Promise<void> {
     await this.executor.query(
-      'INSERT INTO user_sessions (session_id, user_id, token_hash, expires_at, revoked_at, created_at, last_used_at, device_label, client_platform) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)',
-      [session.session_id, session.user_id, session.token_hash, session.expires_at, session.created_at, session.last_used_at, session.device_label, session.client_platform],
+      'INSERT INTO user_sessions (session_id, user_id, token_hash, expires_at, revoked_at, created_at, authenticated_at, last_used_at, device_label, client_platform) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)',
+      [session.session_id, session.user_id, session.token_hash, session.expires_at, session.created_at, session.authenticated_at ?? session.created_at, session.last_used_at, session.device_label, session.client_platform],
     );
   }
 
   async findActiveSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null> {
     return this.selectOne<SessionWithUser>(
-      'SELECT s.session_id, s.user_id, s.token_hash, s.expires_at, s.revoked_at, s.created_at, s.last_used_at, s.device_label, s.client_platform, u.email AS user_email, u.email_verified_at AS user_email_verified_at, u.account_status AS user_account_status, u.created_at AS user_created_at, u.updated_at AS user_updated_at FROM user_sessions s INNER JOIN users u ON u.user_id = s.user_id WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > NOW(3) LIMIT 1',
+      'SELECT s.session_id, s.user_id, s.token_hash, s.expires_at, s.revoked_at, s.created_at, s.authenticated_at, s.last_used_at, s.device_label, s.client_platform, u.email AS user_email, u.email_verified_at AS user_email_verified_at, u.account_status AS user_account_status, u.admin_role AS user_admin_role, u.created_at AS user_created_at, u.updated_at AS user_updated_at FROM user_sessions s INNER JOIN users u ON u.user_id = s.user_id WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > NOW(3) LIMIT 1',
       [tokenHash],
     );
   }
@@ -270,6 +273,7 @@ export function toSafeUser(user: StoredUser): SafeUser {
     email: user.email,
     emailVerifiedAt: user.email_verified_at ? user.email_verified_at.toISOString() : null,
     accountStatus: user.account_status,
+    adminRole: user.admin_role ?? 'user',
     createdAt: user.created_at.toISOString(),
     updatedAt: user.updated_at.toISOString(),
   };

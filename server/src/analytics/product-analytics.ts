@@ -19,7 +19,6 @@ export type FailureCategory = 'validation' | 'no_results' | 'ai_provider' | 'met
 const eventSchema = z.object({
   eventName: z.enum(productEventNames),
   recommendationCorrelationId: z.string().uuid().nullable().default(null),
-  configurationVersionId: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).nullable().default(null),
   resultCountBucket: z.enum(['none', '0', '1_5', '6_10', '11_20', '21_plus']).default('none'),
   responseStatus: z.enum(['none', 'success', 'empty', 'failure']).default('none'),
   responseTimeBucket: z.enum(['none', 'under_1s', '1_3s', '3_10s', 'over_10s']).default('none'),
@@ -42,7 +41,17 @@ const eventSchema = z.object({
 });
 
 export type ProductAnalyticsEventInput = z.input<typeof eventSchema>;
-export type ValidatedProductAnalyticsEvent = z.output<typeof eventSchema> & { eventId: string; occurredAt: Date };
+export type ValidatedProductAnalyticsEvent = z.output<typeof eventSchema> & {
+  configurationVersionId: string | null;
+  eventId: string;
+  occurredAt: Date;
+};
+
+export interface ProductAnalyticsRecorder {
+  record(input: ProductAnalyticsEventInput, now?: Date): Promise<boolean>;
+}
+
+const configurationVersionIdSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).nullable();
 
 export interface ProductAnalyticsRepositoryLike {
   insertEvent(event: ValidatedProductAnalyticsEvent): Promise<void>;
@@ -107,6 +116,25 @@ export class ProductAnalyticsService {
   ) {}
 
   async record(input: ProductAnalyticsEventInput, now = new Date()): Promise<boolean> {
+    return this.recordForConfiguration(input, this.activeConfigurationVersionId, now);
+  }
+
+  forConfiguration(configurationVersionId: string | null): ProductAnalyticsRecorder {
+    const parsedVersionId = configurationVersionIdSchema.safeParse(configurationVersionId);
+    if (!parsedVersionId.success) {
+      throw new Error('Invalid server configuration version ID');
+    }
+
+    return {
+      record: (input, now = new Date()) => this.recordForConfiguration(input, parsedVersionId.data, now),
+    };
+  }
+
+  private async recordForConfiguration(
+    input: ProductAnalyticsEventInput,
+    configurationVersionId: string | null,
+    now: Date,
+  ): Promise<boolean> {
     if (!this.repository) return false;
     const parsed = eventSchema.safeParse(input);
     if (!parsed.success) {
@@ -117,7 +145,7 @@ export class ProductAnalyticsService {
     try {
       await this.repository.insertEvent({
         ...parsed.data,
-        configurationVersionId: this.activeConfigurationVersionId,
+        configurationVersionId,
         eventId: randomUUID(),
         occurredAt: coarseUtcTimestamp(now),
       });

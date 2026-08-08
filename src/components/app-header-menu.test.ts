@@ -45,6 +45,7 @@ describe('app-header-menu logic', () => {
 
   it('uses canonical routes for account navigation actions', () => {
     expect(resolveAccountActionRoute('search')).toBe('/');
+    expect(resolveAccountActionRoute('admin')).toBe('/admin');
     expect(resolveAccountActionRoute('library')).toBe('/profile/library');
     expect(resolveAccountActionRoute('profile')).toBe('/profile');
     expect(resolveAccountActionRoute('about')).toBe('/about');
@@ -83,6 +84,14 @@ describe('app-header-menu logic', () => {
     expect(getHeaderMenuActions('initializing').map((item) => item.key)).toEqual([
       'login',
       'register',
+    ]);
+
+    expect(getHeaderMenuActions('authenticated', 'editor').map((item) => item.key)).toEqual([
+      'search',
+      'library',
+      'profile',
+      'admin',
+      'logout',
     ]);
   });
 });

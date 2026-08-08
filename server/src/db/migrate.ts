@@ -16,6 +16,21 @@ export interface MigrationFile {
   checksum: string;
 }
 
+export interface AppliedMigration {
+  migration_name: string;
+  checksum: string;
+}
+
+export function assertAppliedMigrationChecksums(files: MigrationFile[], applied: AppliedMigration[]): void {
+  const filesByName = new Map(files.map((file) => [file.fileName, file]));
+  for (const migration of applied) {
+    const file = filesByName.get(migration.migration_name);
+    if (file && file.checksum !== migration.checksum) {
+      throw new Error(`Applied migration checksum mismatch: ${migration.migration_name}`);
+    }
+  }
+}
+
 export function getMigrationsDirectory(): string {
   return path.resolve(__dirname, 'migrations');
 }
@@ -61,9 +76,11 @@ export async function migrateDatabase(): Promise<void> {
   try {
     await ensureMigrationTable(pool);
 
-    const [rows] = await pool.query(`SELECT migration_name FROM ${MIGRATIONS_TABLE}`);
-    const appliedMigrations = new Set((rows as Array<{ migration_name: string }>).map((row) => row.migration_name));
+    const [rows] = await pool.query(`SELECT migration_name, checksum FROM ${MIGRATIONS_TABLE}`);
+    const applied = rows as AppliedMigration[];
     const files = await listMigrationFiles();
+    assertAppliedMigrationChecksums(files, applied);
+    const appliedMigrations = new Set(applied.map((row) => row.migration_name));
 
     for (const file of files) {
       if (appliedMigrations.has(file.fileName)) {

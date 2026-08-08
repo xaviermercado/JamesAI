@@ -103,7 +103,7 @@ function validateParameters<TName extends AnalyticsEventName>(name: TName, value
 
   if (name === 'page_view') {
     const policy = getRoutePolicy(String(record.route));
-    if (policy.path !== record.route || policy.title !== record.page_title || policy.path === '/not-found') return null;
+    if (policy.path !== record.route || policy.title !== record.page_title || !policy.analytics) return null;
   }
 
   return record as AnalyticsEventMap[TName];
@@ -157,7 +157,7 @@ export class AnalyticsClient {
 
   trackPageView(pathname: string): boolean {
     const policy = getRoutePolicy(pathname);
-    if (policy.path === '/not-found' || this.lastPagePath === policy.path) return false;
+    if (!policy.analytics || this.lastPagePath === policy.path) return false;
     const sent = this.track('page_view', { route: policy.path, page_title: policy.title });
     if (sent) this.lastPagePath = policy.path;
     return sent;
