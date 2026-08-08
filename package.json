@@ -57,7 +57,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "preexport:web": "node scripts/clean-web-dist.js && tsx scripts/generate-search-assets.ts",
+    "preexport:web": "node scripts/validate-web-export-env.js && node scripts/clean-web-dist.js && tsx scripts/generate-search-assets.ts",
     "export:web": "expo export --platform web --clear",
     "postexport:web": "node scripts/copy-web-rewrites.js",
     "lint": "expo lint",

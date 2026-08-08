@@ -8,7 +8,7 @@ describe('resolveApiBaseUrl', () => {
   });
 
   it('normalizes a configured HTTPS endpoint', () => {
-    expect(resolveApiBaseUrl('https://scouty-api.onrender.com/')).toBe('https://scouty-api.onrender.com');
+    expect(resolveApiBaseUrl('https://jamesai-fmm4.onrender.com/')).toBe('https://jamesai-fmm4.onrender.com');
   });
 
   it('rejects insecure configured endpoints in production', () => {

@@ -12,7 +12,7 @@ The backend is a Node/Express app and should be hosted separately (Render, Railw
 
 ## Production API URL
 Set the frontend API base URL with:
-- EXPO_PUBLIC_API_BASE_URL=https://scouty-api.onrender.com
+- EXPO_PUBLIC_API_BASE_URL=https://jamesai-fmm4.onrender.com
 - EXPO_PUBLIC_ANALYTICS_ENABLED=true
 - EXPO_PUBLIC_GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX
 - EXPO_PUBLIC_SITE_INDEXING_ENABLED=true
