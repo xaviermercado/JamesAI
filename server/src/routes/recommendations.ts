@@ -19,6 +19,7 @@ import { recommendationSchema } from '../schemas/recommendation';
 import { TmdbService } from '../services/tmdb-service';
 import type { RecommendationRequest } from '../types/recommendations';
 import { logger } from '../utils/logger';
+import { classifyFailure, createRecommendationCorrelationId, ProductAnalyticsService, responseTimeBucket, resultCountBucket } from '../analytics/product-analytics';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -106,21 +107,32 @@ export function createRecommendationsRouter(
   feedbackRepo?: FeedbackRepositoryLike | null,
   libraryRepo?: LibraryRepositoryLike | null,
   letterboxdRepo?: LetterboxdRepositoryLike | null,
+  productAnalytics?: ProductAnalyticsService | null,
 ) {
   const router = express.Router();
 
   router.post('/recommendations', async (req: Request, res: Response) => {
+    const recommendationCorrelationId = createRecommendationCorrelationId();
+    const startedAt = Date.now();
+    let authenticated = false;
+    let mediaType: 'movie' | 'tv' = 'movie';
     try {
       const parsed = recommendationSchema.safeParse(req.body);
       if (!parsed.success) {
+        await productAnalytics?.record({
+          eventName: 'recommendation_failed', recommendationCorrelationId,
+          responseStatus: 'failure', failureCategory: 'validation', sourceSurface: 'recommendations',
+        });
         return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
       }
+      mediaType = parsed.data.mediaType ?? 'movie';
 
       // Load saved preferences if authenticated (non-fatal on failure).
       let authContext: AuthRecommendationContext | null = null;
       if (config && authRepo && profileRepo) {
         authContext = await loadAuthRecommendationContext(req, authRepo, profileRepo, config);
       }
+      authenticated = Boolean(authContext);
       const savedPrefs: SavedPreferences | null = authContext?.savedPreferences ?? null;
 
       // Resolve effective preferences by merging saved + temporary overrides.
@@ -129,6 +141,12 @@ export function createRecommendationsRouter(
         providerIds: parsed.data.providerIds,
         originalLanguages: parsed.data.originalLanguages,
         streamingServices: parsed.data.streamingServices,
+      });
+      await productAnalytics?.record({
+        eventName: 'recommendation_requested', recommendationCorrelationId, mediaType,
+        providerFilterCount: Math.min(20, effective.effectiveProviderIds?.length ?? effective.legacyStreamingServices?.length ?? 0),
+        languageFilterCount: Math.min(20, effective.effectiveLanguages?.length ?? 0),
+        authenticated, sourceSurface: 'recommendations',
       });
 
       const payload: RecommendationRequest = {
@@ -218,8 +236,17 @@ export function createRecommendationsRouter(
         }
       }
 
+      const resultBucket = resultCountBucket(personalizedRecommendations.length);
+      await productAnalytics?.record({
+        eventName: 'recommendation_completed', recommendationCorrelationId, mediaType,
+        responseStatus: personalizedRecommendations.length > 0 ? 'success' : 'empty',
+        responseTimeBucket: responseTimeBucket(Date.now() - startedAt), resultCountBucket: resultBucket,
+        authenticated, sourceSurface: 'recommendations',
+      });
+
       return res.json({
         ...result,
+        recommendationRequestId: recommendationCorrelationId,
         recommendations: personalizedRecommendations,
         preferencesApplied: effective.savedPreferencesApplied,
         feedbackPersonalizationApplied,
@@ -232,6 +259,12 @@ export function createRecommendationsRouter(
           : undefined,
       });
     } catch (error) {
+      await productAnalytics?.record({
+        eventName: 'recommendation_failed', recommendationCorrelationId, mediaType,
+        responseStatus: 'failure', responseTimeBucket: responseTimeBucket(Date.now() - startedAt),
+        failureCategory: classifyFailure(error, 'metadata_provider'), authenticated,
+        sourceSurface: 'recommendations',
+      });
       logger.error('recommendations.route_error', { error });
       return res.status(502).json({ error: getErrorMessage(error) });
     }

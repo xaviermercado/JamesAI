@@ -20,6 +20,8 @@ import { OpenAiService } from './services/openai-service';
 import { TmdbService } from './services/tmdb-service';
 import { createContactRouter } from './contact/contact-router';
 import { logger } from './utils/logger';
+import { ProductAnalyticsRepository } from './analytics/product-analytics-repository';
+import { ProductAnalyticsService } from './analytics/product-analytics';
 
 dotenv.config();
 
@@ -42,13 +44,15 @@ const profileRepository = databaseConnection ? new ProfileRepository(databaseCon
 const feedbackRepository = databaseConnection ? new FeedbackRepository(databaseConnection.pool) : null;
 const libraryRepository = databaseConnection ? new LibraryRepository(databaseConnection.pool) : null;
 const letterboxdRepository = databaseConnection ? new LetterboxdRepository(databaseConnection.pool) : null;
+const productAnalyticsRepository = databaseConnection ? new ProductAnalyticsRepository(databaseConnection.pool) : null;
+const productAnalytics = new ProductAnalyticsService(productAnalyticsRepository, config.jamesConfigurationVersionId ?? null);
 
 app.use(cors({
   origin: config.frontendOrigin ?? true,
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
-app.use('/api/contact', createContactRouter(config));
+app.use('/api/contact', createContactRouter(config, undefined, productAnalytics));
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
   const startedAt = Date.now();
@@ -100,18 +104,18 @@ const tmdbService = new TmdbService(
 );
 
 if (authRepository) {
-  app.use('/api/auth', createAuthRouter(config, authRepository));
+  app.use('/api/auth', createAuthRouter(config, authRepository, undefined, productAnalytics));
 
   if (profileRepository) {
-    app.use('/api/profile', createProfileRouter(config, authRepository, profileRepository, letterboxdRepository));
+    app.use('/api/profile', createProfileRouter(config, authRepository, profileRepository, letterboxdRepository, productAnalytics));
   }
 
   if (feedbackRepository) {
-    app.use('/api/feedback', createFeedbackRouter(config, authRepository, feedbackRepository));
+    app.use('/api/feedback', createFeedbackRouter(config, authRepository, feedbackRepository, productAnalytics));
   }
 
   if (libraryRepository) {
-    app.use('/api/library', createLibraryRouter(config, authRepository, libraryRepository, tmdbService));
+    app.use('/api/library', createLibraryRouter(config, authRepository, libraryRepository, tmdbService, productAnalytics));
   }
 } else {
   app.get('/api/auth/session', (_req, res) => {
@@ -143,7 +147,7 @@ if (authRepository) {
   });
 }
 
-app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository, letterboxdRepository));
+app.use('/api', createRecommendationsRouter(tmdbService, config, authRepository, profileRepository, feedbackRepository, libraryRepository, letterboxdRepository, productAnalytics));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', emailPepperFingerprint, sessionPepperFingerprint, appBaseUrl: config.appBaseUrl });

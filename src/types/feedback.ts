@@ -13,4 +13,5 @@ export interface SubmitFeedbackInput {
   feedbackType: FeedbackType;
   genres?: string[];
   originalLanguage?: string;
+  recommendationRequestId?: string;
 }

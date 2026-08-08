@@ -7,6 +7,7 @@ import { clearSessionCookie, getSessionCookieOptions, setSessionCookie } from '.
 import { AUTH_CSRF_HEADER_NAME, createCsrfToken, hashSessionToken, timingSafeStringEqual } from './auth-crypto';
 import { getSessionTokenFromRequest } from './auth-request';
 import { emailOnlySchema, loginSchema, registerSchema, resetPasswordSchema, verifyEmailSchema } from './auth-schemas';
+import type { ProductAnalyticsService } from '../analytics/product-analytics';
 import type { AuthRepositoryLike } from './auth-repository';
 import { AuthService } from './auth-service';
 import type { EmailService } from '../email/email-service';
@@ -71,7 +72,7 @@ function setNoStoreHeaders(res: Response): void {
   res.append('Vary', 'Authorization');
 }
 
-export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLike, emailService?: EmailService) {
+export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLike, emailService?: EmailService, productAnalytics?: ProductAnalyticsService | null) {
   const router = express.Router();
   const authService = new AuthService(repository, config, emailService);
   const isProduction = config.nodeEnv === 'production';
@@ -112,6 +113,8 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
 
     try {
       const result = await authService.register(parsed.data);
+      await productAnalytics?.record({ eventName: 'registration_completed', sourceSurface: 'auth' });
+      await productAnalytics?.record({ eventName: 'verification_email_succeeded', sourceSurface: 'auth' });
       return res.status(201).json({ user: result.user });
     } catch (error) {
       logAuthRouteError('/register', req, error);
@@ -146,8 +149,10 @@ export function createAuthRouter(config: AppConfig, repository: AuthRepositoryLi
 
     try {
       await authService.resendVerification(parsed.data.email);
+      await productAnalytics?.record({ eventName: 'verification_email_succeeded', sourceSurface: 'auth' });
       return res.json({ ok: true });
     } catch (error) {
+      await productAnalytics?.record({ eventName: 'verification_email_failed', failureCategory: 'email_provider', sourceSurface: 'auth' });
       logAuthRouteError('/resend-verification', req, error);
       return res.status(500).json({ error: 'Unable to send verification email' });
     }

@@ -14,6 +14,7 @@ export const libraryActionSchema = z.object({
   tmdbId: tmdbIdSchema,
   mediaType: mediaTypeSchema,
   action: z.enum(['add_watchlist', 'mark_watched', 'mark_unwatched', 'remove']),
+  recommendationRequestId: z.string().uuid().optional(),
 }).strict();
 
 export const libraryStateLookupSchema = z.object({

@@ -11,6 +11,7 @@ import { toSafeAuthActionMessage } from '@/features/auth/error-messages';
 import { getSafeRedirectPath } from '@/features/auth/redirect';
 import { signupFormSchema } from '@/features/auth/validation';
 import { registerAuthAccount } from '@/services/auth-api';
+import { analytics } from '@/services/analytics';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -55,6 +56,7 @@ export default function SignupScreen() {
         email: parsed.data.email,
         password: parsed.data.password,
       });
+      analytics.track('sign_up', { method: 'email' });
       router.replace(`/verify-email?email=${encodeURIComponent(parsed.data.email)}`);
     } catch (error) {
       setFormError(toSafeAuthActionMessage(error, 'Unable to create your account right now.'));

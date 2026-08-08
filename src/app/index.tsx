@@ -17,6 +17,7 @@ import { getMyFeedback, removeMyFeedback, submitMyFeedback } from '@/services/fe
 import { getMyLibraryStates, updateMyLibraryAction } from '@/services/library-api';
 import { getMyPreferences } from '@/services/profile-api';
 import { getRecommendations } from '@/services/recommendations-api';
+import { analytics, countBucket, responseTimeBucket, resultCountBucket } from '@/services/analytics';
 import type { LibraryAction, LibraryStatus } from '@/types/library';
 import type { MediaType, MovieRecommendation, RecommendationRequest, RecommendationResponse } from '@/types/recommendations';
 import type { UserPreferences } from '@/types/profile';
@@ -176,11 +177,30 @@ export default function HomeScreen() {
       request.streamingServices = serviceNames;
     }
 
+    const startedAt = Date.now();
     try {
       const result = await getRecommendations(request);
       if (!controller.signal.aborted) {
         setRecommendations(result.recommendations);
         setLastResult(result);
+        const providerCount = serviceNames.length || result.preferenceContext?.providerCount || 0;
+        const languageCount = languageOverride?.length ?? result.preferenceContext?.languageCount ?? 0;
+        analytics.track('search', {
+          media_type: mediaType,
+          genre_count: '0',
+          provider_count: countBucket(providerCount),
+          language_count: countBucket(languageCount),
+          authenticated: status === 'authenticated',
+        });
+        analytics.track('recommendations_viewed', {
+          result_count_bucket: resultCountBucket(result.recommendations.length),
+          response_time_bucket: responseTimeBucket(Date.now() - startedAt),
+        });
+        if (mediaType !== 'movie') analytics.track('filter_applied', { filter_category: 'media_type', selected_count_bucket: '1' });
+        if (maxRuntime) analytics.track('filter_applied', { filter_category: 'runtime', selected_count_bucket: '1' });
+        if (countryOverride.trim()) analytics.track('filter_applied', { filter_category: 'market', selected_count_bucket: '1' });
+        if (serviceNames.length) analytics.track('filter_applied', { filter_category: 'provider', selected_count_bucket: countBucket(serviceNames.length) });
+        if (languageOverride !== null) analytics.track('filter_applied', { filter_category: 'language', selected_count_bucket: countBucket(languageOverride.length) });
       }
     } catch (nextError) {
       if (!controller.signal.aborted) {
@@ -234,9 +254,13 @@ export default function HomeScreen() {
             feedbackType,
             genres: recommendation.genres.slice(0, 3),
             originalLanguage: recommendation.originalLanguage,
+            recommendationRequestId: lastResult?.recommendationRequestId,
           },
           csrfToken,
         );
+        if (nextAction === 'like' || nextAction === 'dislike') {
+          analytics.track('feedback_submitted', { feedback_category: nextAction === 'like' ? 'positive' : 'negative' });
+        }
       }
     } catch (nextError) {
       if (feedbackRequestVersionRef.current[key] === nextVersion) {
@@ -317,6 +341,7 @@ export default function HomeScreen() {
           tmdbId: recommendation.tmdbMovieId,
           mediaType: recommendation.mediaType,
           action,
+          recommendationRequestId: lastResult?.recommendationRequestId,
         },
         csrfToken,
       );
@@ -326,6 +351,9 @@ export default function HomeScreen() {
           ...current,
           [key]: response.state?.status ?? null,
         }));
+        if (action === 'add_watchlist' && response.state?.status === 'watchlist') {
+          analytics.track('watchlist_added', { media_type: recommendation.mediaType, source_surface: 'recommendations' });
+        }
       }
     } catch (nextError) {
       if (libraryRequestVersionRef.current[key] === nextVersion) {

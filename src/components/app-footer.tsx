@@ -1,11 +1,14 @@
 import { Link } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { useAnalyticsConsent } from '@/components/analytics-consent-provider';
 import { ENGINE_CREDIT, PUBLIC_BRAND_NAME } from '@/constants/brand';
 import { BrandColors, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
 
 export function AppFooter() {
+  const { openPreferences } = useAnalyticsConsent();
+
   return (
     <View style={styles.footerWrap}>
       <View style={styles.footerInner}>
@@ -14,6 +17,7 @@ export function AppFooter() {
           <Link href={'/contact' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Contact</ThemedText></Link>
           <Link href={'/privacy' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Privacy</ThemedText></Link>
           <Link href={'/terms' as never} asChild><ThemedText type="linkPrimary" style={styles.footerLink}>Terms</ThemedText></Link>
+          <Pressable accessibilityRole="button" onPress={openPreferences}><ThemedText type="linkPrimary" style={styles.footerLink}>Analytics preferences</ThemedText></Pressable>
         </View>
         <ThemedText themeColor="textSecondary" style={styles.footerCopy}>{ENGINE_CREDIT}</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.footerCopy}>© {new Date().getFullYear()} {PUBLIC_BRAND_NAME}</ThemedText>

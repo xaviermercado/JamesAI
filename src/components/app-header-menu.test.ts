@@ -9,6 +9,7 @@ import {
   resolveMainMenuTriggerLabel,
   resolveAccountTriggerLabel,
   shouldShowAccountMenu,
+  shouldUseCompactAnonymousMenu,
 } from './app-header-menu';
 
 describe('app-header-menu logic', () => {
@@ -57,6 +58,13 @@ describe('app-header-menu logic', () => {
     expect(shouldShowAccountMenu('authenticated')).toBe(true);
     expect(shouldShowAccountMenu('anonymous')).toBe(false);
     expect(shouldShowAccountMenu('initializing')).toBe(false);
+  });
+
+  it('keeps anonymous static and first-client renders compact until viewport hydration', () => {
+    expect(shouldUseCompactAnonymousMenu(false, false, 1280)).toBe(true);
+    expect(shouldUseCompactAnonymousMenu(false, true, 1280)).toBe(false);
+    expect(shouldUseCompactAnonymousMenu(false, true, 390)).toBe(true);
+    expect(shouldUseCompactAnonymousMenu(true, false, 1280)).toBe(false);
   });
 
   it('returns the right menu action set by auth status', () => {

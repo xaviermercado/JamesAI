@@ -1,6 +1,11 @@
 DirectoryIndex index.html
 RewriteEngine On
 
+# Keep production search signals on the canonical HTTPS apex origin.
+RewriteCond %{HTTPS} !=on [OR]
+RewriteCond %{HTTP_HOST} !^scouty\.ca$ [NC]
+RewriteRule ^ https://scouty.ca%{REQUEST_URI} [R=301,L]
+
 # Serve existing files and directories directly.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

@@ -10,6 +10,7 @@ import type { AuthRepositoryLike } from '../auth/auth-repository';
 import { streamingServiceCatalog, updateContentLanguagesSchema, updatePreferencesSchema, updateProfileSchema, updateStreamingServicesSchema } from './profile-schemas';
 import type { LetterboxdRepositoryLike, StoredLetterboxdSettings } from '../letterboxd/letterboxd-repository';
 import { fetchAndParseLetterboxdRss } from '../letterboxd/letterboxd-rss';
+import { classifyFailure, type ProductAnalyticsService } from '../analytics/product-analytics';
 import { scoutyAvatarCatalog } from './avatar-catalog';
 import { normalizeProfileUsername } from './profile-usernames';
 import type { ProfileRepositoryLike } from './profile-repository';
@@ -104,6 +105,7 @@ export function createProfileRouter(
   authRepository: AuthRepositoryLike,
   profileRepository: ProfileRepositoryLike,
   letterboxdRepository?: LetterboxdRepositoryLike | null,
+  productAnalytics?: ProductAnalyticsService | null,
 ) {
   const router = express.Router();
   const authService = new AuthService(authRepository, config);
@@ -538,6 +540,9 @@ export function createProfileRouter(
           rssResult.errorCode ?? 'rss_refresh_failed',
           rssResult.errorMessage ?? 'Unable to refresh Letterboxd activity',
         );
+        await productAnalytics?.record({
+          eventName: 'letterboxd_sync_failed', failureCategory: 'letterboxd_feed', sourceSurface: 'profile',
+        });
 
         const [nextSettings, counts] = await Promise.all([
           letterboxdRepository.getSettings(userId),
@@ -566,6 +571,7 @@ export function createProfileRouter(
         letterboxdRepository.getSettings(userId),
         letterboxdRepository.countTitlesBySource(userId),
       ]);
+      await productAnalytics?.record({ eventName: 'letterboxd_sync_completed', responseStatus: 'success', sourceSurface: 'profile' });
 
       return res.json({
         refreshed: true,
@@ -574,6 +580,9 @@ export function createProfileRouter(
         status: toLetterboxdStatusPayload(nextSettings, counts, username),
       });
     } catch (error) {
+      await productAnalytics?.record({
+        eventName: 'letterboxd_sync_failed', failureCategory: classifyFailure(error, 'letterboxd_feed'), sourceSurface: 'profile',
+      });
       logProfileRouteError('/letterboxd/refresh', req, error);
       return res.status(500).json({ error: 'Unable to refresh Letterboxd activity right now' });
     }

@@ -8,6 +8,7 @@
     "prebuild": "node ./scripts/prebuild.js",
     "dev": "tsx watch src/index.ts",
     "db:migrate": "tsx src/db/migrate.ts",
+    "analytics:maintain": "tsx src/analytics/run-maintenance.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",

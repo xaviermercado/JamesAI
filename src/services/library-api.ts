@@ -35,7 +35,7 @@ export async function getMyLibraryStates(
 }
 
 export async function updateMyLibraryAction(
-  input: { tmdbId: number; mediaType: MediaType; action: LibraryAction },
+  input: { tmdbId: number; mediaType: MediaType; action: LibraryAction; recommendationRequestId?: string },
   csrfToken?: string | null,
 ): Promise<{ ok: boolean; state: LibraryState | null }> {
   return requestJson<{ ok: boolean; state: LibraryState | null }>('/api/library/action', {

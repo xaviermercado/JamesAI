@@ -11,6 +11,7 @@ import { toSafeAuthActionMessage } from '@/features/auth/error-messages';
 import { getSafeRedirectPath } from '@/features/auth/redirect';
 import { loginFormSchema } from '@/features/auth/validation';
 import { loginAuthAccount } from '@/services/auth-api';
+import { analytics } from '@/services/analytics';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function LoginScreen() {
     try {
       const session = await loginAuthAccount({ email: parsed.data.email, password: parsed.data.password });
       applySession(session);
+      analytics.track('login', { method: 'email' });
       router.replace((redirectTo ?? '/') as never);
     } catch (error) {
       setFormError(toSafeAuthActionMessage(error, 'Unable to log in right now.'));

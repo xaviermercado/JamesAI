@@ -15,6 +15,7 @@ import {
   resolveMainMenuTriggerLabel,
   resolveAccountTriggerLabel,
   shouldShowAccountMenu,
+  shouldUseCompactAnonymousMenu,
   type AccountAction,
 } from '@/components/app-header-menu';
 import { ThemedText } from '@/components/themed-text';
@@ -39,17 +40,23 @@ export function AppHeader() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 70, right: 16 });
+  const [viewportHydrated, setViewportHydrated] = useState(false);
   const triggerRef = useRef<View | null>(null);
   const menuPanelRef = useRef<View | null>(null);
   const menuItemRefs = useRef<(View | null)[]>([]);
   const showAccountMenu = shouldShowAccountMenu(status);
-  const isCompactAnonymousMenu = !showAccountMenu && width < 768;
+  const isCompactAnonymousMenu = shouldUseCompactAnonymousMenu(showAccountMenu, viewportHydrated, width);
   const menuActions = useMemo(() => getHeaderMenuActions(status), [status]);
 
   const triggerA11yLabel = useMemo(
     () => (showAccountMenu ? resolveAccountTriggerLabel(menuOpen, accountLabel) : resolveMainMenuTriggerLabel(menuOpen)),
     [accountLabel, menuOpen, showAccountMenu],
   );
+
+  useEffect(() => {
+    const hydrationTimer = setTimeout(() => setViewportHydrated(true), 0);
+    return () => clearTimeout(hydrationTimer);
+  }, []);
 
   useEffect(() => {
     let active = true;

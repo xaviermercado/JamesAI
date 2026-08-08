@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BrandColors, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { getContactCsrfToken, submitContactMessage } from '@/services/contact-api';
+import { analytics } from '@/services/analytics';
 
 export default function ContactScreen() {
   const [name, setName] = useState('');
@@ -62,6 +63,7 @@ export default function ContactScreen() {
         message,
         website,
       }, csrfToken);
+      analytics.track('contact_submitted', { response_status: 'success' });
 
       setSuccess('Thanks for reaching out. Your message has been sent.');
       setName('');

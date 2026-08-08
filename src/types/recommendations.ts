@@ -46,6 +46,7 @@ export interface MovieRecommendation extends MovieCandidate {
 }
 
 export interface RecommendationResponse {
+  recommendationRequestId?: string;
   recommendations: MovieRecommendation[];
   source: 'mock' | 'live';
   /** True when the server used at least one saved profile preference for this request. */

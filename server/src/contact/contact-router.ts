@@ -8,6 +8,7 @@ import type { AppConfig } from '../config/env';
 import { createEmailService, type EmailService } from '../email/email-service';
 import { contactSubmissionSchema } from './contact-schemas';
 import { logger } from '../utils/logger';
+import type { ProductAnalyticsService } from '../analytics/product-analytics';
 
 const CSRF_TTL_MS = 10 * 60 * 1000;
 
@@ -51,7 +52,7 @@ class ContactCsrfStore {
   }
 }
 
-export function createContactRouter(config: AppConfig, emailService: EmailService = createEmailService(config)) {
+export function createContactRouter(config: AppConfig, emailService: EmailService = createEmailService(config), productAnalytics?: ProductAnalyticsService | null) {
   const router = express.Router();
   const isProduction = config.nodeEnv === 'production';
   const csrfStore = new ContactCsrfStore();
@@ -124,8 +125,10 @@ export function createContactRouter(config: AppConfig, emailService: EmailServic
         message,
         correlationId,
       });
+      await productAnalytics?.record({ eventName: 'contact_submission_succeeded', sourceSurface: 'contact' });
       return res.status(202).json({ ok: true });
     } catch (error) {
+      await productAnalytics?.record({ eventName: 'contact_submission_failed', failureCategory: 'email_provider', sourceSurface: 'contact' });
       logger.error('contact.route_error', { route: 'POST /api/contact', correlationId, error });
       return res.status(502).json({ error: 'Unable to send your message right now. Please try again later.' });
     }

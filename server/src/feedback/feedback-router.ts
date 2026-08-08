@@ -9,6 +9,7 @@ import type { AppConfig } from '../config/env';
 import type { FeedbackRepositoryLike } from './feedback-repository';
 import { submitFeedbackSchema } from './feedback-schemas';
 import { logger } from '../utils/logger';
+import type { ProductAnalyticsService } from '../analytics/product-analytics';
 
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
   if (!origin || !config.frontendOrigin) return true;
@@ -36,6 +37,7 @@ export function createFeedbackRouter(
   config: AppConfig,
   authRepository: AuthRepositoryLike,
   feedbackRepository: FeedbackRepositoryLike,
+  productAnalytics?: ProductAnalyticsService | null,
 ) {
   const router = express.Router();
   const authService = new AuthService(authRepository, config);
@@ -87,6 +89,16 @@ export function createFeedbackRouter(
         feedbackType,
         { genresJson, originalLanguage: originalLanguage ?? null },
       );
+      if (parsed.data.recommendationRequestId) {
+        await productAnalytics?.record({
+          eventName: 'recommendation_feedback',
+          recommendationCorrelationId: parsed.data.recommendationRequestId,
+          mediaType,
+          authenticated: true,
+          feedbackCategory: feedbackType === 'liked' ? 'positive' : feedbackType === 'disliked' ? 'negative' : 'already_watched',
+          sourceSurface: 'recommendations',
+        });
+      }
 
       return res.json({ feedback: toApiFeedback(saved) });
     } catch (error) {

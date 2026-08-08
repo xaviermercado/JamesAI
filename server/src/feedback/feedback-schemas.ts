@@ -10,6 +10,7 @@ export const submitFeedbackSchema = z.object({
   // Optional cached metadata — provided by the client from the displayed recommendation.
   genres: z.array(z.string().trim().max(80)).max(10).optional(),
   originalLanguage: z.string().trim().toLowerCase().max(10).optional(),
+  recommendationRequestId: z.string().uuid().optional(),
 }).strict();
 
 export type SubmitFeedbackInput = z.infer<typeof submitFeedbackSchema>;

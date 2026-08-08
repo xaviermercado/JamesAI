@@ -54,6 +54,10 @@ export function shouldShowAccountMenu(status: HeaderAuthStatus): boolean {
   return status === 'authenticated';
 }
 
+export function shouldUseCompactAnonymousMenu(showAccountMenu: boolean, viewportHydrated: boolean, width: number): boolean {
+  return !showAccountMenu && (!viewportHydrated || width < 768);
+}
+
 export function getHeaderMenuActions(status: HeaderAuthStatus): HeaderMenuItem[] {
   return status === 'authenticated' ? AUTHENTICATED_MENU_ACTIONS : ANONYMOUS_MENU_ACTIONS;
 }

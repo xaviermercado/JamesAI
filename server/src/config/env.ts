@@ -47,6 +47,7 @@ const baseEnvSchema = z.object({
   MYSQL_SSL_CA: z.string().optional(),
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(20).optional().default(5),
   SESSION_TOKEN_PEPPER: z.string().trim().min(32).optional(),
+  JAMES_CONFIGURATION_VERSION_ID: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
 });
 
 type BaseEnv = z.infer<typeof baseEnvSchema>;
@@ -89,6 +90,7 @@ export interface AppConfig {
   emailTokenPepper?: string;
   database: DatabaseConfig | null;
   sessionTokenPepper?: string;
+  jamesConfigurationVersionId?: string;
 }
 
 function extractEmailAddress(value: string): string {
@@ -221,5 +223,6 @@ export function loadAppConfig(rawEnv: NodeJS.ProcessEnv = process.env): AppConfi
     emailTokenPepper: parsed.EMAIL_TOKEN_PEPPER?.trim() || undefined,
     database,
     sessionTokenPepper: parsed.SESSION_TOKEN_PEPPER?.trim() || undefined,
+    jamesConfigurationVersionId: parsed.JAMES_CONFIGURATION_VERSION_ID?.trim() || undefined,
   };
 }

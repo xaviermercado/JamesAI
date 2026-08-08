@@ -11,6 +11,7 @@ import type { MediaType } from '../types/recommendations';
 import { logger } from '../utils/logger';
 import type { LibraryRepositoryLike, StoredLibraryTitle } from './library-repository';
 import { libraryActionSchema, libraryStateLookupSchema, paginationSchema } from './library-schemas';
+import type { ProductAnalyticsService } from '../analytics/product-analytics';
 
 function isAllowedOrigin(origin: string | undefined, config: AppConfig): boolean {
   if (!origin || !config.frontendOrigin) return true;
@@ -63,6 +64,7 @@ export function createLibraryRouter(
   authRepository: AuthRepositoryLike,
   libraryRepository: LibraryRepositoryLike,
   tmdbService: TmdbService,
+  productAnalytics?: ProductAnalyticsService | null,
 ) {
   const router = express.Router();
   const authService = new AuthService(authRepository, config);
@@ -214,6 +216,16 @@ export function createLibraryRouter(
         row = await libraryRepository.markWatched(identity.userId, tmdbId, mediaType);
       } else {
         row = await libraryRepository.markUnwatched(identity.userId, tmdbId, mediaType);
+      }
+
+      if (action === 'add_watchlist' && parsed.data.recommendationRequestId) {
+        await productAnalytics?.record({
+          eventName: 'recommendation_saved',
+          recommendationCorrelationId: parsed.data.recommendationRequestId,
+          mediaType,
+          authenticated: true,
+          sourceSurface: 'recommendations',
+        });
       }
 
       return res.json({ ok: true, state: toApiLibraryState(row) });
