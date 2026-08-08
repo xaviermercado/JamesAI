@@ -155,6 +155,8 @@ npm run db:migrate
 
 The same command is also available from the `server/` package as `npm run db:migrate`.
 
+Render server builds run pending migrations after compilation and fail the deployment if migration validation or execution fails. Local builds do not run migrations automatically.
+
 Applied migration files are immutable. The runner compares each applied file with the SHA-256 checksum stored in `schema_migrations` and stops on drift. Make schema corrections in a new numbered migration; do not edit an applied SQL file.
 
 Before applying an administration-schema migration:

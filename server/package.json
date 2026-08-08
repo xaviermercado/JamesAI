@@ -6,6 +6,7 @@
   },
   "scripts": {
     "prebuild": "node ./scripts/prebuild.js",
+    "postbuild": "node ./scripts/postbuild.js",
     "dev": "tsx watch src/index.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "analytics:maintain": "tsx src/analytics/run-maintenance.ts",
